@@ -1,0 +1,56 @@
+model User {
+  id          String       @id @default(auto()) @map("_id") @db.ObjectId
+  firstName   String
+  lastName    String
+  email       String       @unique
+  phoneNumber String       @unique
+  password    String
+  role        UserRoleEnum @default(USER)
+
+  status UserStatus @default(ACTIVE)
+
+  bio      String?
+  location String?
+
+  isAgreeWithTerms Boolean
+  profilePhoto     String?
+
+  otp       String?
+  otpFor    OTPFor?
+  otpExpiry DateTime?
+
+  passwordResetToken        String?
+  passwordResetTokenExpires DateTime?
+
+  isDeleted                     Boolean   @default(false)
+  isEmailVerified               Boolean   @default(false)
+  emailVerificationToken        String?
+  emailVerificationTokenExpires DateTime?
+
+  sentMessages     Message[]          @relation("SentMessages")
+
+  payments         Payment[]
+  transactions     Transaction[]
+  notifications    NotificationUser[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@map("users")
+}
+
+enum OTPFor {
+  USER_VERIFICATION
+  FORGOT_PASSWORD
+  NOT
+}
+
+enum UserRoleEnum {
+  USER
+  SUPERADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}

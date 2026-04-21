@@ -1,0 +1,40 @@
+model Message {
+    id        String   @id @default(auto()) @map("_id") @db.ObjectId
+    roomId    String   @db.ObjectId
+    senderId  String   @db.ObjectId
+    content   String?
+    fileUrl   String[]
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+    isRead    Boolean  @default(false)
+
+    sender User @relation("SentMessages", fields: [senderId], references: [id])
+    room   Room @relation(fields: [roomId], references: [id])
+
+    @@map("messages")
+}
+
+model Room {
+    id           String   @id @default(auto()) @map("_id") @db.ObjectId
+    participants String[] @db.ObjectId
+    roomType     RoomType @default(SINGLE)
+    name         String   @default("Group Name")
+    groupPhoto   String?
+    createdAt    DateTime @default(now())
+    updatedAt    DateTime @updatedAt
+
+    messages Message[]
+
+    @@map("rooms")
+}
+
+// type MessageStatus {
+//     userId     String   @db.ObjectId
+//     isRead Boolean  @default(true)
+//     readAt DateTime @default(now())
+// }
+
+enum RoomType {
+    SINGLE
+    GROUP
+}
