@@ -20,6 +20,7 @@ model Room {
     roomType     RoomType @default(SINGLE)
     name         String   @default("Group Name")
     groupPhoto   String?
+    creatorIp    String?
     createdAt    DateTime @default(now())
     updatedAt    DateTime @updatedAt
 

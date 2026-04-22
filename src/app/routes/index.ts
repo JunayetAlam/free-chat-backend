@@ -6,6 +6,7 @@ import { AssetRouters } from '../modules/Asset/asset.route';
 import { AuthByOtpRouters } from '../modules/AuthByOtp/auth.routes';
 import { SubscriptionRoutes } from '../modules/Subscription/subscription.route';
 import { PaymentRoutes } from '../modules/Payment/payment.route';
+import { RoomRoutes } from '../modules/room/room.route';
 const router = express.Router();
 
 const moduleRoutes = [
@@ -13,6 +14,10 @@ const moduleRoutes = [
   //   path: '/auth',
   //   route: AuthRouters,
   // },
+  {
+    path: '/rooms',
+    route: RoomRoutes,
+  },
   {
     path: '/auth',
     route: AuthByOtpRouters,
@@ -33,7 +38,7 @@ const moduleRoutes = [
     path: '/assets',
     route: AssetRouters,
   },
- 
+
   {
     path: '/subscriptions',
     route: SubscriptionRoutes,
