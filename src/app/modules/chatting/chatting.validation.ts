@@ -37,13 +37,15 @@ const wsMessageEditSchema = z.object({
 });
 
 const wsEventSchema = z.object({
-  event: z.enum([
-    'ROOM_JOIN',
-    'MESSAGE_SEND',
-    'MESSAGE_EDIT',
-    'MESSAGE_DELETE',
-  ]),
-  payload: z.record(z.string(), z.any()),
+  body: z.object({
+    event: z.enum([
+      'ROOM_JOIN',
+      'MESSAGE_SEND',
+      'MESSAGE_EDIT',
+      'MESSAGE_DELETE',
+    ]),
+    payload: z.record(z.string(), z.any()),
+  }),
 });
 
 export const chattingValidation = {

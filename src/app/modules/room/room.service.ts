@@ -10,9 +10,9 @@ import QueryBuilder from '../../builder/QueryBuilder';
 import { messageStore } from '../chatting/chatting.message-store';
 
 const createRoom = catchAsync(async (req, res) => {
-  const payload = req.body;
-
   const creatorIp = req.ip;
+
+  console.log(creatorIp);
 
   const room = await prisma.room.create({
     data: {
@@ -40,6 +40,8 @@ const getRoomById = catchAsync(async (req, res) => {
 
 const getAllRooms = catchAsync(async (req, res) => {
   const query = req.query;
+  const requesterIp = req.ip;
+  query.creatorIp = requesterIp;
   const roomQuery = new QueryBuilder(prisma.room, query);
   const result = await roomQuery
     .search(['name', 'creatorIp'])
