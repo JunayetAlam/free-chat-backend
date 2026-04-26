@@ -11,7 +11,7 @@ export const broadcast = (
   const subs = roomSubscribers.get(roomId);
   if (!subs) return;
   subs.forEach(ws => {
-    if (ws !== exclude) send(ws, event); // ← you had an empty forEach, fixed here
+    if (ws !== exclude) send(ws, event);
   });
 };
 

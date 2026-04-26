@@ -15,14 +15,14 @@ model Message {
 }
 
 model Room {
-    id           String   @id @default(auto()) @map("_id") @db.ObjectId
-    participants String[] @db.ObjectId
-    roomType     RoomType @default(SINGLE)
-    name         String   @default("Group Name")
-    groupPhoto   String?
-    creatorIp    String?
-    createdAt    DateTime @default(now())
-    updatedAt    DateTime @updatedAt
+    id              String   @id @default(auto()) @map("_id") @db.ObjectId
+    participants    String[] @db.ObjectId
+    roomType        RoomType @default(SINGLE)
+    name            String   @default("Group Name")
+    groupPhoto      String?
+    creatorDeviceId String?
+    createdAt       DateTime @default(now())
+    updatedAt       DateTime @updatedAt
 
     messages Message[]
 

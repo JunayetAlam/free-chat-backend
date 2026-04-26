@@ -1,7 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { IncomingMessage, Server } from 'http';
-import { sendError } from './chatting.utils';
-import { extractIpFromWs } from './chatting.utils';
+import { extractDeviceIdFromWs, sendError } from './chatting.utils';
 import { chattingValidation } from './chatting.validation';
 import { chattingRequestValidation } from './chatting.validate.request';
 import { clients, roomSubscribers } from './chatting.state';
@@ -12,8 +11,8 @@ export const initWebSocketServer = (server: Server): void => {
   const wss = new WebSocketServer({ server, path: '/ws' });
 
   wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
-    const ip = extractIpFromWs(req);
-    clients.set(ws, { ws, ip, roomId: null });
+    const deviceId = extractDeviceIdFromWs(req);
+    clients.set(ws, { ws, deviceId, roomId: null });
 
     ws.on('message', async raw => {
       let parsed: unknown;
@@ -62,7 +61,7 @@ export const initWebSocketServer = (server: Server): void => {
     });
 
     ws.on('error', err =>
-      console.error(`[WS Client Error] ip=${ip}`, err.message),
+      console.error(`[WS Client Error] deviceId=${deviceId}`, err.message),
     );
   });
 

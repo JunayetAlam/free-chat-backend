@@ -22,14 +22,14 @@ class MessageStore {
   editMessage(
     roomId: string,
     messageId: string,
-    senderIp: string,
+    senderDeviceCode: string,
     content: string,
   ): Message | null {
     const messages = this.getRoom(roomId);
     const index = messages.findIndex(m => m.id === messageId);
 
     if (index === -1) return null;
-    if (messages[index].senderIp !== senderIp) return null;
+    if (messages[index].senderDeviceCode !== senderDeviceCode) return null;
 
     messages[index] = {
       ...messages[index],
@@ -40,12 +40,16 @@ class MessageStore {
     return messages[index];
   }
 
-  deleteMessage(roomId: string, messageId: string, senderIp: string): boolean {
+  deleteMessage(
+    roomId: string,
+    messageId: string,
+    senderDeviceCode: string,
+  ): boolean {
     const messages = this.getRoom(roomId);
     const index = messages.findIndex(m => m.id === messageId);
 
     if (index === -1) return false;
-    if (messages[index].senderIp !== senderIp) return false;
+    if (messages[index].senderDeviceCode !== senderDeviceCode) return false;
 
     messages.splice(index, 1);
     return true;

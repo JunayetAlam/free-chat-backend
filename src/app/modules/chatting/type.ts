@@ -1,7 +1,7 @@
 export interface Message {
   id: string;
   roomId: string;
-  senderIp: string;
+  senderDeviceCode: string;
   content: string;
   createdAt: Date;
   updatedAt: Date;

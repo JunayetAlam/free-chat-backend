@@ -2,7 +2,7 @@ import { WebSocket } from 'ws';
 
 export interface ChatClient {
   ws: WebSocket;
-  ip: string;
+  deviceId: string;
   roomId: string | null;
 }
 

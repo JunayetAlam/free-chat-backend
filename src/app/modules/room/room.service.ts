@@ -8,16 +8,15 @@ import { prisma } from '../../utils/prisma';
 import AppError from '../../errors/AppError';
 import QueryBuilder from '../../builder/QueryBuilder';
 import { messageStore } from '../chatting/chatting.message-store';
+import { extractDeviceIdFromRequest } from '../chatting/chatting.utils';
 
 const createRoom = catchAsync(async (req, res) => {
-  const creatorIp = req.ip;
-
-  console.log(creatorIp);
+  const creatorDeviceId = extractDeviceIdFromRequest(req);
 
   const room = await prisma.room.create({
     data: {
       name: randomUUID(),
-      creatorIp,
+      creatorDeviceId,
     },
   });
 
@@ -59,10 +58,10 @@ const getAllRooms = catchAsync(async (req, res) => {
 
 const deleteRoom = catchAsync(async (req, res) => {
   const { roomId } = req.params;
-  const requesterIp = req.ip;
+  const requesterDeviceId = extractDeviceIdFromRequest(req);
   const room = await prisma.room.findUnique({ where: { id: roomId } });
   if (!room) throw new AppError(httpStatus.NOT_FOUND, 'Room not found');
-  if (room.creatorIp !== requesterIp)
+  if (room.creatorDeviceId !== requesterDeviceId)
     throw new AppError(httpStatus.FORBIDDEN, 'Forbidden');
 
   await prisma.room.delete({ where: { id: roomId } });

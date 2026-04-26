@@ -42,7 +42,11 @@ export const handleRoomJoin = async (
     roomId,
     {
       event: 'ROOM_JOIN',
-      payload: { roomId, ip: client.ip, message: 'A user joined the room' },
+      payload: {
+        roomId,
+        ip: client.deviceId,
+        message: 'A user joined the room',
+      },
     },
     ws,
   );
@@ -81,7 +85,7 @@ export const handleMessageSend = async (
   const message = messageStore.addMessage({
     id: randomUUID(),
     roomId,
-    senderIp: client.ip,
+    senderDeviceCode: client.deviceId,
     content,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -118,7 +122,7 @@ export const handleMessageEdit = async (
   const updated = messageStore.editMessage(
     roomId,
     messageId,
-    client.ip,
+    client.deviceId,
     content,
   );
   if (!updated) {
@@ -156,7 +160,11 @@ export const handleMessageDelete = async (
     return;
   }
 
-  const deleted = messageStore.deleteMessage(roomId, messageId, client.ip);
+  const deleted = messageStore.deleteMessage(
+    roomId,
+    messageId,
+    client.deviceId,
+  );
   if (!deleted) {
     sendError(ws, 'Message not found or you are not the sender');
     return;

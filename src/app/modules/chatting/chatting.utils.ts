@@ -4,20 +4,12 @@ import { ApiResponse, WsOutgoingEvent } from './type';
 import { prisma } from '../../utils/prisma';
 import { WebSocket } from 'ws';
 
-export const extractIpFromRequest = (req: Request): string => {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
-  }
-  return req.socket?.remoteAddress ?? 'unknown';
+export const extractDeviceIdFromRequest = (req: Request): string => {
+  return (req.headers['x-device-id'] as string) || 'unknown';
 };
 
-export const extractIpFromWs = (req: IncomingMessage): string => {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (typeof forwarded === 'string') {
-    return forwarded.split(',')[0].trim();
-  }
-  return req.socket?.remoteAddress ?? 'unknown';
+export const extractDeviceIdFromWs = (req: IncomingMessage): string => {
+  return (req.headers['x-device-id'] as string) || 'unknown';
 };
 
 export const buildResponse = <T>(

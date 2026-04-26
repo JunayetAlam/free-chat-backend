@@ -7,17 +7,26 @@ import { verifyToken } from '../utils/verifyToken';
 import { UserRoleEnum } from '@prisma/client';
 import { insecurePrisma } from '../utils/prisma';
 
-type TupleHasDuplicate<T extends readonly unknown[]> =
-  T extends [infer F, ...infer R]
+type TupleHasDuplicate<T extends readonly unknown[]> = T extends [
+  infer F,
+  ...infer R,
+]
   ? F extends R[number]
-  ? true
-  : TupleHasDuplicate<R>
+    ? true
+    : TupleHasDuplicate<R>
   : false;
 
 type NoDuplicates<T extends readonly unknown[]> =
   TupleHasDuplicate<T> extends true ? never : T;
 
-const auth = <T extends readonly (UserRoleEnum | 'ANY' | 'OPTIONAL' | 'CHECK_SUBSCRIPTION' )[]>(
+const auth = <
+  T extends readonly (
+    | UserRoleEnum
+    | 'ANY'
+    | 'OPTIONAL'
+    | 'CHECK_SUBSCRIPTION'
+  )[],
+>(
   ...roles: NoDuplicates<T> extends never ? never : T
 ) => {
   const doesCheckSubscription = roles.includes('CHECK_SUBSCRIPTION');
@@ -47,16 +56,16 @@ const auth = <T extends readonly (UserRoleEnum | 'ANY' | 'OPTIONAL' | 'CHECK_SUB
             payments: {
               where: {
                 paymentType: 'SUBSCRIPTION',
-                paymentStatus: 'SUCCESS'
+                paymentStatus: 'SUCCESS',
               },
               select: {
                 id: true,
                 paymentStatus: true,
                 subscriptionPackageId: true,
-                endAt: true
-              }
-            }
-          })
+                endAt: true,
+              },
+            },
+          }),
         },
       });
 
@@ -64,30 +73,37 @@ const auth = <T extends readonly (UserRoleEnum | 'ANY' | 'OPTIONAL' | 'CHECK_SUB
         throw new AppError(httpStatus.UNAUTHORIZED, 'You are not authorized!');
       }
       if (user.isDeleted) {
-        throw new AppError(httpStatus.NOT_FOUND, 'Account has been deleted. Please contact support to reactivate your account');
+        throw new AppError(
+          httpStatus.NOT_FOUND,
+          'Account has been deleted. Please contact support to reactivate your account',
+        );
       }
       if (!user.isEmailVerified) {
         throw new AppError(httpStatus.UNAUTHORIZED, 'You are not verified!');
       }
-
-
 
       if (user.status === 'BLOCKED') {
         throw new AppError(httpStatus.UNAUTHORIZED, 'You are Blocked!');
       }
       const payments = user.payments;
       if (doesCheckSubscription && !roles.includes('SUPERADMIN')) {
-        const isVerified = new Date(payments?.filter((item: { paymentStatus: string; }) => item.paymentStatus === 'SUCCESS')[0]?.endAt || '') >= new Date();
+        const isVerified =
+          new Date(
+            payments?.filter(
+              (item: { paymentStatus: string }) =>
+                item.paymentStatus === 'SUCCESS',
+            )[0]?.endAt || '',
+          ) >= new Date();
         if (!isVerified) {
           throw new AppError(
             httpStatus.FORBIDDEN,
-            'Your subscription has expired or is not active. Please subscribe to continue accessing this feature.'
+            'Your subscription has expired or is not active. Please subscribe to continue accessing this feature.',
           );
         }
       }
 
       if (user?.profilePhoto) {
-        verifyUserToken.profilePhoto = user?.profilePhoto
+        verifyUserToken.profilePhoto = user?.profilePhoto;
       }
 
       req.user = verifyUserToken;
@@ -97,9 +113,8 @@ const auth = <T extends readonly (UserRoleEnum | 'ANY' | 'OPTIONAL' | 'CHECK_SUB
         if (roles.length && !roles.includes(verifyUserToken.role)) {
           throw new AppError(httpStatus.FORBIDDEN, 'Forbidden!');
         }
-        next()
+        next();
       }
-
     } catch (error) {
       next(error);
     }
