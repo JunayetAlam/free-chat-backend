@@ -16,6 +16,7 @@ model Room {
 
   creator  Guest         @relation("RoomCreator", fields: [creatorGuestId], references: [id])
   members  RoomMember[]
+  joinedBy JoinedRoom[]
   messages Message[]
   logs     ActivityLog[]
 
@@ -48,6 +49,32 @@ model RoomMember {
   @@unique([roomId, guestId])
   @@index([guestId])
   @@map("room_members")
+}
+
+/** Per-guest room history: created once on first join; soft-deletable from history */
+model JoinedRoom {
+  id           String    @id @default(auto()) @map("_id") @db.ObjectId
+  roomId       String    @db.ObjectId
+  guestId      String
+  firstJoinedAt DateTime @default(now())
+  lastJoinedAt DateTime  @default(now())
+  joinIp       String?
+  userAgent    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  isDeleted  Boolean   @default(false)
+  isArchived Boolean   @default(false)
+  deletedAt  DateTime?
+  archivedAt DateTime?
+
+  room  Room  @relation(fields: [roomId], references: [id])
+  guest Guest @relation(fields: [guestId], references: [id])
+
+  @@unique([roomId, guestId])
+  @@index([guestId, isDeleted])
+  @@index([roomId])
+  @@map("joined_rooms")
 }
 
 model Message {

@@ -8,6 +8,7 @@ import QueryBuilder from '../../builder/QueryBuilder';
 import { getClientIpFromRequest } from '../../utils/getClientIp';
 import { upsertGuest } from '../../utils/upsertGuest';
 import { logActivity } from '../../utils/activityLogger';
+import { recordJoinedRoom } from '../../utils/recordJoinedRoom';
 import {
   activeRecordFilter,
   softArchiveFields,
@@ -103,6 +104,13 @@ const createRoom = catchAsync(async (req, res) => {
     ip,
     userAgent,
     metadata: { inviteCode: room.inviteCode, name: room.name },
+  });
+
+  await recordJoinedRoom({
+    roomId: room.id,
+    guestId: req.guest.id,
+    ip,
+    userAgent,
   });
 
   sendResponse(res, {

@@ -8,6 +8,7 @@ import { prisma } from '../../utils/prisma';
 import { upsertGuest } from '../../utils/upsertGuest';
 import { logActivity } from '../../utils/activityLogger';
 import { activeRecordFilter, softDeleteFields } from '../../utils/softDelete';
+import { recordJoinedRoom } from '../../utils/recordJoinedRoom';
 
 export const handleRoomJoin = async (
   ws: WebSocket,
@@ -34,9 +35,7 @@ export const handleRoomJoin = async (
   }
 
   const displayName =
-    data.displayName?.trim() ||
-    client.displayName ||
-    undefined;
+    data.displayName?.trim() || client.displayName || undefined;
 
   const guest = await upsertGuest({
     guestId: client.guestId,
@@ -45,7 +44,8 @@ export const handleRoomJoin = async (
     userAgent: client.userAgent,
   });
 
-  const resolvedName = guest.displayName || `Guest-${client.guestId.slice(0, 6)}`;
+  const resolvedName =
+    guest.displayName || `Guest-${client.guestId.slice(0, 6)}`;
   client.displayName = resolvedName;
 
   const existingMember = await prisma.roomMember.findUnique({
@@ -83,6 +83,13 @@ export const handleRoomJoin = async (
       },
     });
   }
+
+  await recordJoinedRoom({
+    roomId: room.id,
+    guestId: client.guestId,
+    ip: client.ip,
+    userAgent: client.userAgent,
+  });
 
   joinRoom(ws, room.id);
 
@@ -146,12 +153,14 @@ export const handleMessageSend = async (
     sendError,
     ws,
   );
+  console.log(data, 'data');
   if (!data) {
     sendError(ws, 'Invalid event structure');
     return;
   }
 
   const { roomId, content } = data;
+  console.log(client, 'client');
   if (client.roomId !== roomId) {
     sendError(ws, 'You are not in this room');
     return;

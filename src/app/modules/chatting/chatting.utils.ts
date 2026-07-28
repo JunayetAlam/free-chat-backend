@@ -1,6 +1,6 @@
 import { IncomingMessage } from 'http';
 import { WebSocket } from 'ws';
-import { parse as parseCookie } from 'cookie';
+import cookieParser from 'cookie';
 import { Secret } from 'jsonwebtoken';
 import { ApiResponse, WsOutgoingEvent } from './type';
 import { verifyToken } from '../../utils/verifyToken';
@@ -35,7 +35,8 @@ export const sendError = (ws: WebSocket, message: string): void => {
 const getCookies = (req: IncomingMessage) => {
   const cookieHeader = req.headers.cookie;
   if (!cookieHeader) return {} as Record<string, string>;
-  return parseCookie(cookieHeader);
+  const cookies = cookieParser.parseCookie(cookieHeader);
+  return cookies;
 };
 
 export const extractGuestTokenFromWs = (
@@ -61,15 +62,8 @@ export const verifyGuestWsAuth = (
   req: IncomingMessage,
 ): { guestId: string; ip?: string; userAgent?: string } | null => {
   const cookies = getCookies(req);
+  console.log(cookies);
   const cookieGuestId = cookies.guestId?.trim() || null;
-
-  let queryGuestId: string | null = null;
-  try {
-    const url = new URL(req.url || '', 'http://localhost');
-    queryGuestId = url.searchParams.get('guestId')?.trim() || null;
-  } catch {
-    // ignore
-  }
 
   const token = extractGuestTokenFromWs(req);
   if (!token) return null;
@@ -96,7 +90,6 @@ export const verifyGuestWsAuth = (
   if (!tokenGuestId) return null;
 
   if (cookieGuestId && cookieGuestId !== tokenGuestId) return null;
-  if (queryGuestId && queryGuestId !== tokenGuestId) return null;
 
   return {
     guestId: tokenGuestId,

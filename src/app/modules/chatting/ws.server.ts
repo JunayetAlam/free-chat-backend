@@ -40,6 +40,7 @@ export const initWebSocketServer = (server: Server): void => {
       let parsed: unknown;
       try {
         parsed = JSON.parse(raw.toString());
+        console.log(parsed);
       } catch {
         sendError(ws, 'Invalid JSON format');
         return;

@@ -16,6 +16,7 @@ model Guest {
 
   createdRooms Room[]        @relation("RoomCreator")
   memberships  RoomMember[]
+  joinedRooms  JoinedRoom[]
   messages     Message[]
   activityLogs ActivityLog[]
 
