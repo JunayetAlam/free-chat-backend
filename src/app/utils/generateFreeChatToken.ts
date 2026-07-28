@@ -1,13 +1,16 @@
 import jwt, { Secret, SignOptions } from 'jsonwebtoken';
 
+export type GuestTokenPayload = {
+  guestId: string;
+};
+
 export const generateFreeChatToken = (
-  payload: { deviceUniqueCode: string; deviceFingerprint: string },
+  payload: GuestTokenPayload,
   secret: Secret,
   expiresIn: SignOptions['expiresIn'],
 ) => {
-  const token = jwt.sign(payload, secret, {
+  return jwt.sign(payload, secret, {
     algorithm: 'HS256',
     expiresIn,
   });
-  return token;
 };

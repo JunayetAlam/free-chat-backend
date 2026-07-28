@@ -1,13 +1,3 @@
-export interface Message {
-  id: string;
-  roomId: string;
-  senderDeviceCode: string;
-  content: string;
-  createdAt: Date;
-  updatedAt: Date;
-  isEdited: boolean;
-}
-
 export type WsEventType =
   | 'ROOM_JOIN'
   | 'ROOM_LEAVE'
@@ -23,7 +13,7 @@ export interface WsBaseEvent {
 
 export interface WsRoomJoinEvent extends WsBaseEvent {
   event: 'ROOM_JOIN';
-  payload: { roomId: string };
+  payload: { roomId: string; displayName?: string };
 }
 
 export interface WsMessageSendEvent extends WsBaseEvent {

@@ -4,11 +4,12 @@ import seedSuperAdmin from './app/DB';
 import config from './config';
 import { customConsole } from './app/utils/customConsole';
 import { initWebSocketServer } from './app/modules/chatting/ws.server';
+
 const port = config.port || 5000;
 
 async function main() {
   const server: HTTPServer = createServer(app).listen(port, () => {
-    customConsole(port, 'Initial Project (Server)');
+    customConsole(port, 'Free Chat (Server)');
     seedSuperAdmin();
   });
 

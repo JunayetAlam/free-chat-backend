@@ -1,0 +1,24 @@
+model ActivityLog {
+  id        String         @id @default(auto()) @map("_id") @db.ObjectId
+  action    ActivityAction
+  roomId    String?        @db.ObjectId
+  messageId String?        @db.ObjectId
+  guestId   String?
+  ip        String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime       @default(now())
+
+  isDeleted  Boolean   @default(false)
+  isArchived Boolean   @default(false)
+  deletedAt  DateTime?
+  archivedAt DateTime?
+
+  room  Room?  @relation(fields: [roomId], references: [id])
+  guest Guest? @relation(fields: [guestId], references: [id])
+
+  @@index([roomId, createdAt])
+  @@index([guestId, createdAt])
+  @@index([action, createdAt])
+  @@map("activity_logs")
+}

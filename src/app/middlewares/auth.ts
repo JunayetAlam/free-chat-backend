@@ -29,7 +29,6 @@ const auth = <
 >(
   ...roles: NoDuplicates<T> extends never ? never : T
 ) => {
-  const doesCheckSubscription = roles.includes('CHECK_SUBSCRIPTION');
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
       const token = req.headers.authorization;
@@ -46,26 +45,9 @@ const auth = <
         config.jwt.access_secret as Secret,
       );
 
-      // Check user is exist
       const user = await insecurePrisma.user.findUniqueOrThrow({
         where: {
           id: verifyUserToken.id,
-        },
-        include: {
-          ...(doesCheckSubscription && {
-            payments: {
-              where: {
-                paymentType: 'SUBSCRIPTION',
-                paymentStatus: 'SUCCESS',
-              },
-              select: {
-                id: true,
-                paymentStatus: true,
-                subscriptionPackageId: true,
-                endAt: true,
-              },
-            },
-          }),
         },
       });
 
@@ -85,21 +67,13 @@ const auth = <
       if (user.status === 'BLOCKED') {
         throw new AppError(httpStatus.UNAUTHORIZED, 'You are Blocked!');
       }
-      const payments = user.payments;
-      if (doesCheckSubscription && !roles.includes('SUPERADMIN')) {
-        const isVerified =
-          new Date(
-            payments?.filter(
-              (item: { paymentStatus: string }) =>
-                item.paymentStatus === 'SUCCESS',
-            )[0]?.endAt || '',
-          ) >= new Date();
-        if (!isVerified) {
-          throw new AppError(
-            httpStatus.FORBIDDEN,
-            'Your subscription has expired or is not active. Please subscribe to continue accessing this feature.',
-          );
-        }
+
+      // Subscription checks are deferred until Payment models are re-enabled.
+      if (
+        roles.includes('CHECK_SUBSCRIPTION') &&
+        !roles.includes('SUPERADMIN')
+      ) {
+        // no-op for now
       }
 
       if (user?.profilePhoto) {

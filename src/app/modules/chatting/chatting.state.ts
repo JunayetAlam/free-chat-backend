@@ -2,8 +2,11 @@ import { WebSocket } from 'ws';
 
 export interface ChatClient {
   ws: WebSocket;
-  deviceId: string;
+  guestId: string;
+  displayName: string | null;
   roomId: string | null;
+  ip?: string;
+  userAgent?: string;
 }
 
 export const clients: Map<WebSocket, ChatClient> = new Map();

@@ -1,6 +1,17 @@
 {
   "include": ["src"],
-  "exclude": ["node_modules"],
+  "exclude": [
+    "node_modules",
+    "src/app/modules/Payment",
+    "src/app/modules/Subscription",
+    "src/app/modules/Notification",
+    "src/app/modules/Socket",
+    "src/app/modules/Asset",
+    "src/app/utils/StripeUtils.ts",
+    "src/app/utils/stripe.ts",
+    "src/app/utils/socket.ts",
+    "src/app/middlewares/socketAuth.ts"
+  ],
   "compilerOptions": {
     /* Visit https://aka.ms/tsconfig to read more about this file */
 

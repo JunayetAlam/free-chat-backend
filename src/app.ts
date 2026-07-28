@@ -4,22 +4,20 @@ import httpStatus from 'http-status';
 import globalErrorHandler from './app/middlewares/globalErrorHandler';
 import router from './app/routes';
 import path from 'path';
-import { StripeWebHook } from './app/utils/StripeUtils';
 import { html } from './htmldesign';
 import cookieParser from 'cookie-parser';
+import requestLogger from './app/middlewares/requestLogger';
+
 const app: Application = express();
 
-app.post(
-  '/api/v1/payments/webhook',
-  express.raw({ type: 'application/json' }),
-  StripeWebHook,
-);
+app.set('trust proxy', 1);
 
 app.use(
   cors({
     origin: [
       'http://localhost:3001',
       'http://localhost:3000',
+      'http://localhost:4000',
       'http://172.252.13.78:3014',
       'https://bretervin.tamshyah.com',
     ],
@@ -27,14 +25,13 @@ app.use(
   }),
 );
 
-//parser
 app.use(cookieParser());
-app.use(express.json());
-app.use(express.json({ limit: '500mb' }));
-app.use(express.urlencoded({ limit: '500mb', extended: true }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ limit: '1mb', extended: true }));
+app.use(requestLogger);
 
 app.get('/', (req: Request, res: Response) => {
-  res.send(html('Initial Project (Server)'));
+  res.send(html('Free Chat (Server)'));
 });
 
 app.use('/api/v1', router);

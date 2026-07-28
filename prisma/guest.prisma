@@ -1,0 +1,23 @@
+model Guest {
+  id          String    @id @map("_id") // client UUID string
+  displayName String?
+  lastIp      String?
+  createdIp   String?
+  userAgent   String?
+  deviceLabel String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastSeenAt  DateTime  @default(now())
+
+  isDeleted  Boolean   @default(false)
+  isArchived Boolean   @default(false)
+  deletedAt  DateTime?
+  archivedAt DateTime?
+
+  createdRooms Room[]        @relation("RoomCreator")
+  memberships  RoomMember[]
+  messages     Message[]
+  activityLogs ActivityLog[]
+
+  @@map("guests")
+}

@@ -1,41 +1,82 @@
-model Message {
-    id        String   @id @default(auto()) @map("_id") @db.ObjectId
-    roomId    String   @db.ObjectId
-    senderId  String   @db.ObjectId
-    content   String?
-    fileUrl   String[]
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-    isRead    Boolean  @default(false)
-
-    sender User @relation("SentMessages", fields: [senderId], references: [id])
-    room   Room @relation(fields: [roomId], references: [id])
-
-    @@map("messages")
-}
-
 model Room {
-    id              String   @id @default(auto()) @map("_id") @db.ObjectId
-    participants    String[] @db.ObjectId
-    roomType        RoomType @default(SINGLE)
-    name            String   @default("Group Name")
-    groupPhoto      String?
-    creatorDeviceId String?
-    createdAt       DateTime @default(now())
-    updatedAt       DateTime @updatedAt
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  name              String?
+  inviteCode        String    @unique
+  creatorGuestId    String
+  creatorIp         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-    messages Message[]
+  isDeleted         Boolean   @default(false)
+  isArchived        Boolean   @default(false)
+  deletedAt         DateTime?
+  archivedAt        DateTime?
+  deletedByGuestId  String?
+  archivedByGuestId String?
 
-    @@map("rooms")
+  creator  Guest         @relation("RoomCreator", fields: [creatorGuestId], references: [id])
+  members  RoomMember[]
+  messages Message[]
+  logs     ActivityLog[]
+
+  @@index([creatorGuestId])
+  @@index([isDeleted, isArchived])
+  @@map("rooms")
 }
 
-// type MessageStatus {
-//     userId     String   @db.ObjectId
-//     isRead Boolean  @default(true)
-//     readAt DateTime @default(now())
-// }
+model RoomMember {
+  id          String    @id @default(auto()) @map("_id") @db.ObjectId
+  roomId      String    @db.ObjectId
+  guestId     String
+  displayName String
+  joinIp      String?
+  lastIp      String?
+  userAgent   String?
+  lastReadAt  DateTime?
+  joinedAt    DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  leftAt      DateTime?
 
-enum RoomType {
-    SINGLE
-    GROUP
+  isDeleted  Boolean   @default(false)
+  isArchived Boolean   @default(false)
+  deletedAt  DateTime?
+  archivedAt DateTime?
+
+  room  Room  @relation(fields: [roomId], references: [id])
+  guest Guest @relation(fields: [guestId], references: [id])
+
+  @@unique([roomId, guestId])
+  @@index([guestId])
+  @@map("room_members")
+}
+
+model Message {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  roomId            String    @db.ObjectId
+  senderGuestId     String
+  senderDisplayName String
+  senderIp          String?
+  content           String
+  previousContent   String?
+  isEdited          Boolean   @default(false)
+  editedAt          DateTime?
+  editedIp          String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  isDeleted         Boolean   @default(false)
+  isArchived        Boolean   @default(false)
+  deletedAt         DateTime?
+  archivedAt        DateTime?
+  deletedByGuestId  String?
+  deletedIp         String?
+  archivedByGuestId String?
+
+  room   Room  @relation(fields: [roomId], references: [id])
+  sender Guest @relation(fields: [senderGuestId], references: [id])
+
+  @@index([roomId, createdAt])
+  @@index([senderGuestId])
+  @@index([roomId, isDeleted, isArchived])
+  @@map("messages")
 }

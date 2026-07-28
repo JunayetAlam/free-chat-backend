@@ -4,64 +4,44 @@ import { Secret } from 'jsonwebtoken';
 import config from '../../config';
 import AppError from '../errors/AppError';
 import { verifyToken } from '../utils/verifyToken';
-import { generateFreeChatToken } from '../utils/generateFreeChatToken';
+import { setGuestCookies } from '../utils/setGuestTokenCookies';
 
-const freeAuth = async (req: Request, _res: Response, next: NextFunction) => {
+/**
+ * Validates guest JWT cookies. Prefer guestIdentity for routes that also need Guest upsert.
+ */
+const freeAuth = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const token = req.cookies.token;
-    const refreshToken = req.cookies.refreshToken;
-    const deviceUniqueCode = req.cookies.deviceUniqueCode;
-    const deviceFingerprint = req.headers.devicefingerprint;
+    const token = req.cookies?.token as string | undefined;
+    const refreshToken = req.cookies?.refreshToken as string | undefined;
+    const cookieGuestId =
+      typeof req.cookies?.guestId === 'string' ? req.cookies.guestId.trim() : '';
+    const guestIdHeader = req.headers['x-guest-id'];
+    const headerGuestId =
+      typeof guestIdHeader === 'string' ? guestIdHeader.trim() : '';
 
-    const createNewTokens = (payload: any) => {
-      const newAccessToken = generateFreeChatToken(
-        payload,
-        config.jwt.access_secret as Secret,
-        '15m',
-      );
-
-      const newRefreshToken = generateFreeChatToken(
-        payload,
-        config.jwt.refresh_secret as Secret,
-        '7d',
-      );
-
-      req.user = payload;
-      _res.cookie('token', newAccessToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'strict',
-      });
-
-      _res.cookie('refreshToken', newRefreshToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'strict',
-      });
-    };
-
-    const validateAndIssue = (decoded: any) => {
-      if (!deviceUniqueCode || !deviceFingerprint) {
-        throw new AppError(httpStatus.UNAUTHORIZED, 'Device not recognized');
+    const issueFromPayload = (guestId: string) => {
+      if (headerGuestId && headerGuestId !== guestId) {
+        throw new AppError(httpStatus.UNAUTHORIZED, 'Guest token mismatch');
       }
-
-      if (
-        decoded.deviceUniqueCode !== deviceUniqueCode ||
-        decoded.deviceFingerprint !== deviceFingerprint
-      ) {
-        throw new AppError(httpStatus.UNAUTHORIZED, 'Device mismatch');
+      if (cookieGuestId && cookieGuestId !== guestId) {
+        throw new AppError(httpStatus.UNAUTHORIZED, 'Guest cookie mismatch');
       }
-
-      createNewTokens(decoded);
+      setGuestCookies(res, { guestId });
+      req.user = { guestId };
     };
 
     if (token) {
       try {
         const decoded = verifyToken(token, config.jwt.access_secret as Secret);
-        validateAndIssue(decoded);
+        const guestId = decoded.guestId as string;
+        if (!guestId) {
+          throw new AppError(httpStatus.UNAUTHORIZED, 'Invalid guest token');
+        }
+        issueFromPayload(guestId);
         return next();
-      } catch {
-        // token expired or invalid → try refresh
+      } catch (error) {
+        if (error instanceof AppError) throw error;
+        // fall through to refresh
       }
     }
 
@@ -73,9 +53,12 @@ const freeAuth = async (req: Request, _res: Response, next: NextFunction) => {
       refreshToken,
       config.jwt.refresh_secret as Secret,
     );
+    const guestId = refreshDecoded.guestId as string;
+    if (!guestId) {
+      throw new AppError(httpStatus.UNAUTHORIZED, 'Invalid guest token');
+    }
 
-    validateAndIssue(refreshDecoded);
-
+    issueFromPayload(guestId);
     return next();
   } catch (error) {
     next(error);

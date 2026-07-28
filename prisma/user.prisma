@@ -23,17 +23,15 @@ model User {
   passwordResetTokenExpires DateTime?
 
   isDeleted                     Boolean   @default(false)
+  isArchived                    Boolean   @default(false)
+  deletedAt                     DateTime?
+  archivedAt                    DateTime?
   isEmailVerified               Boolean   @default(false)
   emailVerificationToken        String?
   emailVerificationTokenExpires DateTime?
 
-  sentMessages     Message[]          @relation("SentMessages")
-
-  payments         Payment[]
-  transactions     Transaction[]
-  notifications    NotificationUser[]
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("users")
 }

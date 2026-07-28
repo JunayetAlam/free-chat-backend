@@ -44,58 +44,23 @@ const getAllUsers = catchAsync(async (req, res) => {
 
 const getMyProfile = catchAsync(async (req, res) => {
   const id = req.user.id;
-  const role = req.user.role;
 
   const Profile = await prisma.user.findUniqueOrThrow({
     where: {
       id: id,
     },
-    include: {
-      ...(role !== 'SUPERADMIN' && {
-        payments: {
-          where: {
-            paymentType: 'SUBSCRIPTION',
-            paymentStatus: 'SUCCESS',
-            endAt: {
-              gte: new Date(),
-            },
-          },
-          select: {
-            id: true,
-            paymentStatus: true,
-            endAt: true,
-            subscriptionPackageId: true
-          }
-        },
-      })
-    }
   });
-
-  if (role === 'SUPERADMIN') {
-    sendResponse(res, {
-      statusCode: httpStatus.OK,
-      message: 'Profile retrieved successfully',
-      data: { ...Profile, hideSubscription: false }
-    });
-    return;
-  }
-
-  const payments = Profile.payments
-  const exactPayment = payments?.filter(item => item.paymentStatus === 'SUCCESS')[0]
-  const isVerified = new Date(exactPayment?.endAt || '') >= new Date();
-  const result = {
-    ...Profile,
-    payments: undefined,
-    isPaid: isVerified,
-    subscriptionPackageId: exactPayment?.subscriptionPackageId || '',
-    endAt: exactPayment?.endAt || null,
-    hideSubscription: false
-  }
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
     message: 'Profile retrieved successfully',
-    data: result,
+    data: {
+      ...Profile,
+      isPaid: false,
+      subscriptionPackageId: '',
+      endAt: null,
+      hideSubscription: false,
+    },
   });
 });
 
