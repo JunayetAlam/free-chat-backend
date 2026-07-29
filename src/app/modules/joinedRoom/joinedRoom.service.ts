@@ -32,7 +32,7 @@ const getAllJoinedRooms = catchAsync(async (req, res) => {
 
   const joinedQuery = new QueryBuilder(prisma.joinedRoom, query);
   const result = await joinedQuery
-    .search(['roomId', 'guestId'])
+    .search(['roomId', 'guestId', 'room.name', 'room.inviteCode'])
     .filter()
     .sort()
     .fields()
@@ -106,7 +106,49 @@ const softDeleteJoinedRoom = catchAsync(async (req, res) => {
   });
 });
 
+/** Archive from this guest's room history (does not archive the Room) */
+const archiveJoinedRoom = catchAsync(async (req, res) => {
+  if (!req.guest) {
+    throw new AppError(httpStatus.UNAUTHORIZED, 'Guest required');
+  }
+
+  const { roomId: roomIdParam } = req.params;
+  const room = await findAccessibleRoomByIdOrInvite(roomIdParam);
+
+  if (!room) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Room not found');
+  }
+
+  const joined = await prisma.joinedRoom.findFirst({
+    where: {
+      roomId: room.id,
+      guestId: req.guest.id,
+      isDeleted: false,
+      isArchived: false,
+    },
+  });
+
+  if (!joined) {
+    throw new AppError(httpStatus.NOT_FOUND, 'Joined room history not found');
+  }
+
+  const updated = await prisma.joinedRoom.update({
+    where: { id: joined.id },
+    data: {
+      isArchived: true,
+      archivedAt: new Date(),
+    },
+  });
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Joined room archived successfully',
+    data: updated,
+  });
+});
+
 export const JoinedRoomService = {
   getAllJoinedRooms,
   softDeleteJoinedRoom,
+  archiveJoinedRoom,
 };

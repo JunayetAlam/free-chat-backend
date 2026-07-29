@@ -37,6 +37,10 @@ const wsMessageEditSchema = z.object({
   }),
 });
 
+const wsConversationListSchema = z.object({
+  body: z.object({}).passthrough(),
+});
+
 const wsEventSchema = z.object({
   body: z.object({
     event: z.enum([
@@ -44,6 +48,7 @@ const wsEventSchema = z.object({
       'MESSAGE_SEND',
       'MESSAGE_EDIT',
       'MESSAGE_DELETE',
+      'CONVERSATION_LIST',
     ]),
     payload: z.record(z.string(), z.any()),
   }),
@@ -55,4 +60,5 @@ export const chattingValidation = {
   wsMessageEditSchema,
   wsEventSchema,
   wsMessageDeleteSchema,
+  wsConversationListSchema,
 };

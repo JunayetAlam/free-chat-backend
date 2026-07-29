@@ -1,7 +1,12 @@
 import { WebSocket } from 'ws';
 import { chattingValidation } from './chatting.validation';
 import { chattingRequestValidation } from './chatting.validate.request';
-import { findActiveRoom, send, sendError } from './chatting.utils';
+import {
+  findActiveRoom,
+  getConversationsForGuest,
+  send,
+  sendError,
+} from './chatting.utils';
 import { broadcast, broadcastAll, joinRoom } from './chatting.broadcast';
 import { clients } from './chatting.state';
 import { prisma } from '../../utils/prisma';
@@ -333,6 +338,31 @@ export const handleMessageDelete = async (
   });
 };
 
+export const handleConversationList = async (
+  ws: WebSocket,
+  payload: unknown,
+): Promise<void> => {
+  const client = clients.get(ws);
+  if (!client) return;
+
+  const data = await chattingRequestValidation(
+    chattingValidation.wsConversationListSchema,
+    payload,
+    sendError,
+    ws,
+  );
+  if (data === null) {
+    sendError(ws, 'Invalid event structure');
+    return;
+  }
+
+  const conversations = await getConversationsForGuest(client.guestId);
+  send(ws, {
+    event: 'CONVERSATION_LIST',
+    payload: { conversations },
+  });
+};
+
 export const eventHandlers: Record<
   string,
   (ws: WebSocket, payload: unknown) => Promise<void>
@@ -341,4 +371,5 @@ export const eventHandlers: Record<
   MESSAGE_SEND: handleMessageSend,
   MESSAGE_EDIT: handleMessageEdit,
   MESSAGE_DELETE: handleMessageDelete,
+  CONVERSATION_LIST: handleConversationList,
 };

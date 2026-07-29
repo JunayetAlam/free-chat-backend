@@ -1,15 +1,12 @@
 import httpStatus from 'http-status';
 import { NotificationType } from '@prisma/client';
 import QueryBuilder from '../../builder/QueryBuilder';
-import { getSocket } from '../../utils/socket';
 import { prisma } from '../../utils/prisma';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
 
 const createNotification = catchAsync(async (req, res) => {
   const { title, message, type, userIds, redirectEndpoint } = req.body;
-
-  const io = getSocket();
 
   const notification = await prisma.notification.create({
     data: {
@@ -28,13 +25,6 @@ const createNotification = catchAsync(async (req, res) => {
 
     await prisma.notificationUser.createMany({
       data: NotificationUsers,
-    });
-
-    userIds.forEach((id: string) => {
-      io.to(id).emit('notification', {
-        ...notification,
-        isRead: false,
-      });
     });
   }
 

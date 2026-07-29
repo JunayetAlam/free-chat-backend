@@ -1,6 +1,11 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { IncomingMessage, Server } from 'http';
-import { sendError, verifyGuestWsAuth } from './chatting.utils';
+import {
+  getConversationsForGuest,
+  send,
+  sendError,
+  verifyGuestWsAuth,
+} from './chatting.utils';
 import { chattingValidation } from './chatting.validation';
 import { chattingRequestValidation } from './chatting.validate.request';
 import { clients, roomSubscribers } from './chatting.state';
@@ -16,17 +21,15 @@ export const initWebSocketServer = (server: Server): void => {
   wss.on('connection', async (ws: WebSocket, req: IncomingMessage) => {
     const auth = verifyGuestWsAuth(req);
     if (!auth) {
+      console.warn('[WS] rejecting connection: unauthorized');
       sendError(ws, 'Unauthorized: valid guest token and guestId required');
       ws.close(1008, 'Unauthorized');
       return;
     }
+    console.log(`[WS] connected guestId=${auth.guestId}`);
 
-    await upsertGuest({
-      guestId: auth.guestId,
-      ip: auth.ip,
-      userAgent: auth.userAgent,
-    });
-
+    // Register client and message handler synchronously before any awaits
+    // so messages sent immediately after connect are not missed.
     clients.set(ws, {
       ws,
       guestId: auth.guestId,
@@ -40,7 +43,7 @@ export const initWebSocketServer = (server: Server): void => {
       let parsed: unknown;
       try {
         parsed = JSON.parse(raw.toString());
-        console.log(parsed);
+        console.log({ parsed });
       } catch {
         sendError(ws, 'Invalid JSON format');
         return;
@@ -70,6 +73,21 @@ export const initWebSocketServer = (server: Server): void => {
         }
       }
     });
+
+    // Run DB setup and initial conversation list in background after
+    // the message handler is registered, so ROOM_JOIN is never missed.
+    upsertGuest({
+      guestId: auth.guestId,
+      ip: auth.ip,
+      userAgent: auth.userAgent,
+    })
+      .then(() => getConversationsForGuest(auth.guestId))
+      .then(conversations => {
+        send(ws, { event: 'CONVERSATION_LIST', payload: { conversations } });
+      })
+      .catch(error => {
+        console.error('[WS] connection setup failed', error);
+      });
 
     ws.on('close', async () => {
       const client = clients.get(ws);

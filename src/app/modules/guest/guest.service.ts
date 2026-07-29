@@ -8,22 +8,21 @@ import {
   setGuestCookies,
 } from '../../utils/setGuestTokenCookies';
 import AppError from '../../errors/AppError';
+import { prisma } from '../../utils/prisma';
+import {
+  deleteFromCloudinary,
+  uploadToCloudinary,
+} from '../Upload/uploadToCloudinary';
 
 const bootstrap = catchAsync(async (req, res) => {
   // Backend owns guest id: cookie → optional header → new UUID
   const guestId = resolveGuestId(req);
-
-  const displayName =
-    typeof req.body?.displayName === 'string'
-      ? req.body.displayName.trim()
-      : undefined;
 
   const ip = getClientIpFromRequest(req);
   const userAgent = req.headers['user-agent'];
 
   const guest = await upsertGuest({
     guestId,
-    displayName,
     ip,
     userAgent: typeof userAgent === 'string' ? userAgent : undefined,
   });
@@ -81,8 +80,41 @@ const updateProfile = catchAsync(async (req, res) => {
   });
 });
 
+const updateProfileImage = catchAsync(async (req, res) => {
+  if (!req.guest) {
+    throw new AppError(httpStatus.UNAUTHORIZED, 'Guest not found');
+  }
+
+  const file = req.file;
+  if (!file) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Please provide image');
+  }
+
+  const previousImg = req.guest.profilePhoto || '';
+  const uploaded = await uploadToCloudinary(file);
+  if (!uploaded.Location) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Failed to upload image');
+  }
+
+  const guest = await prisma.guest.update({
+    where: { id: req.guest.id },
+    data: { profilePhoto: uploaded.Location },
+  });
+
+  if (previousImg) {
+    await deleteFromCloudinary(previousImg);
+  }
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Guest profile image updated successfully',
+    data: guest,
+  });
+});
+
 export const GuestService = {
   bootstrap,
   me,
   updateProfile,
+  updateProfileImage,
 };

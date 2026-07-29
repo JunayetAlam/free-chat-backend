@@ -1,16 +1,5 @@
 import { z } from 'zod';
 
-const bootstrapSchema = z.object({
-  body: z.object({
-    displayName: z
-      .string()
-      .trim()
-      .min(1)
-      .max(40)
-      .optional(),
-  }),
-});
-
 const updateProfileSchema = z.object({
   body: z.object({
     displayName: z.string().trim().min(1).max(40),
@@ -18,6 +7,5 @@ const updateProfileSchema = z.object({
 });
 
 export const GuestValidation = {
-  bootstrapSchema,
   updateProfileSchema,
 };

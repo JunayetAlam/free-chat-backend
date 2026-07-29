@@ -11,8 +11,6 @@ export const chattingRequestValidation = async <T>(
       body: data,
     });
 
-    console.log({ eventParsed });
-
     return eventParsed.body;
   } catch (error: unknown) {
     if (error instanceof ZodError) {
