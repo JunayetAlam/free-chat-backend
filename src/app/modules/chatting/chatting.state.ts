@@ -5,6 +5,8 @@ export interface ChatClient {
   guestId: string;
   displayName: string | null;
   roomId: string | null;
+  /** Bumped on every ROOM_JOIN so overlapping joins discard stale work. */
+  joinEpoch: number;
   ip?: string;
   userAgent?: string;
 }

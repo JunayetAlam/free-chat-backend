@@ -5,7 +5,11 @@ export type WsEventType =
   | 'MESSAGE_EDIT'
   | 'MESSAGE_DELETE'
   | 'MESSAGE_HISTORY'
+  | 'MESSAGE_HISTORY_MORE'
   | 'CONVERSATION_LIST'
+  | 'CONVERSATION_UPDATE'
+  | 'PRESENCE_UPDATE'
+  | 'PRESENCE_SNAPSHOT'
   | 'ERROR';
 
 export interface WsBaseEvent {
@@ -37,10 +41,17 @@ export interface WsConversationListEvent extends WsBaseEvent {
   payload: Record<string, never>;
 }
 
+export interface WsMessageHistoryMoreEvent extends WsBaseEvent {
+  event: 'MESSAGE_HISTORY_MORE';
+  payload: { roomId: string; beforeMessageId: string };
+}
+
 export type ConversationListItem = {
   roomId: string;
   name: string | null;
+  image: string | null;
   inviteCode: string;
+  creatorGuestId: string;
   firstJoinedAt: Date;
   lastJoinedAt: Date;
   lastMessage: {
@@ -55,7 +66,8 @@ export type WsIncomingEvent =
   | WsMessageSendEvent
   | WsMessageEditEvent
   | WsMessageDeleteEvent
-  | WsConversationListEvent;
+  | WsConversationListEvent
+  | WsMessageHistoryMoreEvent;
 
 export interface WsOutgoingEvent {
   event: WsEventType;

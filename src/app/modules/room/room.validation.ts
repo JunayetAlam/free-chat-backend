@@ -7,6 +7,12 @@ const createRoomSchema = z.object({
   }),
 });
 
+const updateRoomSchema = z.object({
+  body: z.object({
+    name: z.string().trim().min(1).max(80),
+  }),
+});
+
 const archiveRoomSchema = z.object({
   params: z.object({
     roomId: z.string().min(1),
@@ -15,5 +21,6 @@ const archiveRoomSchema = z.object({
 
 export const RoomValidation = {
   createRoomSchema,
+  updateRoomSchema,
   archiveRoomSchema,
 };

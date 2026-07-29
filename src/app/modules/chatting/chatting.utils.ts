@@ -9,6 +9,7 @@ import { getClientIpFromWs } from '../../utils/getClientIp';
 import { findActiveRoomByIdOrInvite } from '../../utils/findRoom';
 import { prisma } from '../../utils/prisma';
 import { activeRecordFilter } from '../../utils/softDelete';
+import { clients } from './chatting.state';
 
 export const buildResponse = <T>(
   success: boolean,
@@ -34,6 +35,43 @@ export const sendError = (ws: WebSocket, message: string): void => {
   send(ws, { event: 'ERROR', payload: { message } });
 };
 
+export type ConversationLastMessage = NonNullable<
+  ConversationListItem['lastMessage']
+>;
+
+export const getRoomLastMessage = async (
+  roomId: string,
+): Promise<ConversationLastMessage | null> => {
+  const lastMessage = await prisma.message.findFirst({
+    where: {
+      roomId,
+      ...activeRecordFilter,
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      content: true,
+      createdAt: true,
+      senderDisplayName: true,
+    },
+  });
+
+  if (!lastMessage) return null;
+
+  return {
+    content: lastMessage.content,
+    createdAt: lastMessage.createdAt,
+    senderDisplayName: lastMessage.senderDisplayName,
+  };
+};
+
+const conversationActivityTime = (item: ConversationListItem): number => {
+  if (item.lastMessage?.createdAt) {
+    return new Date(item.lastMessage.createdAt).getTime();
+  }
+  // Do not use lastJoinedAt — opening a room must not reorder the list.
+  return new Date(item.firstJoinedAt).getTime();
+};
+
 /** Durable conversation list from JoinedRoom (not in-memory WS maps). */
 export const getConversationsForGuest = async (
   guestId: string,
@@ -50,44 +88,81 @@ export const getConversationsForGuest = async (
         select: {
           id: true,
           name: true,
+          image: true,
           inviteCode: true,
+          creatorGuestId: true,
         },
       },
     },
-    orderBy: { lastJoinedAt: 'desc' },
   });
 
-  return Promise.all(
+  const conversations = await Promise.all(
     joined.map(async (row): Promise<ConversationListItem> => {
-      const lastMessage = await prisma.message.findFirst({
-        where: {
-          roomId: row.roomId,
-          ...activeRecordFilter,
-        },
-        orderBy: { createdAt: 'desc' },
-        select: {
-          content: true,
-          createdAt: true,
-          senderDisplayName: true,
-        },
-      });
+      const lastMessage = await getRoomLastMessage(row.roomId);
 
       return {
         roomId: row.roomId,
         name: row.room.name,
+        image: row.room.image,
         inviteCode: row.room.inviteCode,
+        creatorGuestId: row.room.creatorGuestId,
         firstJoinedAt: row.firstJoinedAt,
         lastJoinedAt: row.lastJoinedAt,
-        lastMessage: lastMessage
-          ? {
-              content: lastMessage.content,
-              createdAt: lastMessage.createdAt,
-              senderDisplayName: lastMessage.senderDisplayName,
-            }
-          : null,
+        lastMessage,
       };
     }),
   );
+
+  // Most recently messaged / actioned rooms first (not last opened).
+  conversations.sort(
+    (a, b) => conversationActivityTime(b) - conversationActivityTime(a),
+  );
+
+  return conversations;
+};
+
+const getJoinedGuestIds = async (roomId: string): Promise<Set<string>> => {
+  const joined = await prisma.joinedRoom.findMany({
+    where: {
+      roomId,
+      isDeleted: false,
+      isArchived: false,
+    },
+    select: { guestId: true },
+  });
+  return new Set(joined.map(row => row.guestId));
+};
+
+/**
+ * Deliver a WS event to every connected guest who has joined this room
+ * (not only the currently focused room subscribers).
+ */
+export const broadcastToJoinedMembers = async (
+  roomId: string,
+  event: WsOutgoingEvent,
+): Promise<void> => {
+  const guestIds = await getJoinedGuestIds(roomId);
+  if (guestIds.size === 0) return;
+
+  for (const client of clients.values()) {
+    if (!guestIds.has(client.guestId)) continue;
+    send(client.ws, event);
+  }
+};
+
+/** Push sidebar preview / room meta to every connected guest who joined this room. */
+export const notifyConversationUpdate = async (
+  roomId: string,
+  patch: {
+    lastMessage?: ConversationLastMessage | null;
+    name?: string | null;
+    image?: string | null;
+  },
+): Promise<void> => {
+  await broadcastToJoinedMembers(roomId, {
+    event: 'CONVERSATION_UPDATE',
+    payload: { roomId, ...patch },
+  });
 };
 
 const getCookies = (req: IncomingMessage) => {

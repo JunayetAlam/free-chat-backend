@@ -2,18 +2,43 @@ import { WebSocket } from 'ws';
 import { chattingValidation } from './chatting.validation';
 import { chattingRequestValidation } from './chatting.validate.request';
 import {
+  broadcastToJoinedMembers,
   findActiveRoom,
   getConversationsForGuest,
+  getRoomLastMessage,
+  notifyConversationUpdate,
   send,
   sendError,
 } from './chatting.utils';
-import { broadcast, broadcastAll, joinRoom } from './chatting.broadcast';
+import { broadcast, joinRoom } from './chatting.broadcast';
 import { clients } from './chatting.state';
+import { sendPresenceSnapshot } from './chatting.presence';
 import { prisma } from '../../utils/prisma';
 import { upsertGuest } from '../../utils/upsertGuest';
 import { logActivity } from '../../utils/activityLogger';
 import { activeRecordFilter, softDeleteFields } from '../../utils/softDelete';
 import { recordJoinedRoom } from '../../utils/recordJoinedRoom';
+
+const MESSAGE_PAGE_SIZE = 30;
+
+const fetchMessagePage = async (
+  roomId: string,
+  beforeCreatedAt?: Date,
+): Promise<{ messages: Awaited<ReturnType<typeof prisma.message.findMany>>; hasMore: boolean }> => {
+  const rows = await prisma.message.findMany({
+    where: {
+      roomId,
+      ...activeRecordFilter,
+      ...(beforeCreatedAt ? { createdAt: { lt: beforeCreatedAt } } : {}),
+    },
+    orderBy: { createdAt: 'desc' },
+    take: MESSAGE_PAGE_SIZE + 1,
+  });
+
+  const hasMore = rows.length > MESSAGE_PAGE_SIZE;
+  const messages = rows.slice(0, MESSAGE_PAGE_SIZE).reverse();
+  return { messages, hasMore };
+};
 
 export const handleRoomJoin = async (
   ws: WebSocket,
@@ -39,6 +64,12 @@ export const handleRoomJoin = async (
     return;
   }
 
+  // Fast room switches start overlapping joins; only the latest epoch may
+  // mutate subscription state or push MESSAGE_HISTORY (avoids URL thrashing).
+  const joinEpoch = ++client.joinEpoch;
+  const isCurrentJoin = () =>
+    clients.get(ws) === client && client.joinEpoch === joinEpoch;
+
   const displayName =
     data.displayName?.trim() || client.displayName || undefined;
 
@@ -48,6 +79,8 @@ export const handleRoomJoin = async (
     ip: client.ip,
     userAgent: client.userAgent,
   });
+
+  if (!isCurrentJoin()) return;
 
   const resolvedName =
     guest.displayName || `Guest-${client.guestId.slice(0, 6)}`;
@@ -61,6 +94,8 @@ export const handleRoomJoin = async (
       },
     },
   });
+
+  if (!isCurrentJoin()) return;
 
   if (existingMember) {
     await prisma.roomMember.update({
@@ -89,6 +124,8 @@ export const handleRoomJoin = async (
     });
   }
 
+  if (!isCurrentJoin()) return;
+
   await recordJoinedRoom({
     roomId: room.id,
     guestId: client.guestId,
@@ -96,21 +133,35 @@ export const handleRoomJoin = async (
     userAgent: client.userAgent,
   });
 
+  if (!isCurrentJoin()) return;
+
   joinRoom(ws, room.id);
 
-  const history = await prisma.message.findMany({
-    where: {
-      roomId: room.id,
-      ...activeRecordFilter,
-    },
-    orderBy: { createdAt: 'asc' },
-    take: 200,
-  });
+  const { messages: history, hasMore } = await fetchMessagePage(room.id);
+
+  if (!isCurrentJoin()) return;
 
   send(ws, {
     event: 'MESSAGE_HISTORY',
-    payload: { roomId: room.id, messages: history },
+    payload: { roomId: room.id, messages: history, hasMore },
   });
+
+  await sendPresenceSnapshot(ws, room.id);
+
+  if (!isCurrentJoin()) return;
+
+  broadcast(
+    room.id,
+    {
+      event: 'PRESENCE_UPDATE',
+      payload: {
+        guestId: client.guestId,
+        isOnline: true,
+        roomId: room.id,
+      },
+    },
+    ws,
+  );
 
   await logActivity({
     action: 'MESSAGE_HISTORY_READ',
@@ -118,7 +169,7 @@ export const handleRoomJoin = async (
     guestId: client.guestId,
     ip: client.ip,
     userAgent: client.userAgent,
-    metadata: { count: history.length },
+    metadata: { count: history.length, hasMore },
   });
 
   await logActivity({
@@ -129,6 +180,8 @@ export const handleRoomJoin = async (
     userAgent: client.userAgent,
     metadata: { displayName: resolvedName },
   });
+
+  if (!isCurrentJoin()) return;
 
   broadcast(
     room.id,
@@ -158,14 +211,12 @@ export const handleMessageSend = async (
     sendError,
     ws,
   );
-  console.log(data, 'data');
   if (!data) {
     sendError(ws, 'Invalid event structure');
     return;
   }
 
   const { roomId, content } = data;
-  console.log(client, 'client');
   if (client.roomId !== roomId) {
     sendError(ws, 'You are not in this room');
     return;
@@ -200,7 +251,18 @@ export const handleMessageSend = async (
     metadata: { contentLength: content.length },
   });
 
-  broadcastAll(room.id, { event: 'MESSAGE_SEND', payload: { message } });
+  await broadcastToJoinedMembers(room.id, {
+    event: 'MESSAGE_SEND',
+    payload: { message },
+  });
+
+  await notifyConversationUpdate(room.id, {
+    lastMessage: {
+      content: message.content,
+      createdAt: message.createdAt,
+      senderDisplayName: message.senderDisplayName,
+    },
+  });
 };
 
 export const handleMessageEdit = async (
@@ -270,10 +332,13 @@ export const handleMessageEdit = async (
     },
   });
 
-  broadcastAll(roomId, {
+  await broadcastToJoinedMembers(roomId, {
     event: 'MESSAGE_EDIT',
     payload: { message: updated },
   });
+
+  const lastMessage = await getRoomLastMessage(roomId);
+  await notifyConversationUpdate(roomId, { lastMessage });
 };
 
 export const handleMessageDelete = async (
@@ -332,10 +397,13 @@ export const handleMessageDelete = async (
     userAgent: client.userAgent,
   });
 
-  broadcastAll(roomId, {
+  await broadcastToJoinedMembers(roomId, {
     event: 'MESSAGE_DELETE',
     payload: { roomId, messageId, message: deleted },
   });
+
+  const lastMessage = await getRoomLastMessage(roomId);
+  await notifyConversationUpdate(roomId, { lastMessage });
 };
 
 export const handleConversationList = async (
@@ -363,6 +431,73 @@ export const handleConversationList = async (
   });
 };
 
+export const handleMessageHistoryMore = async (
+  ws: WebSocket,
+  payload: unknown,
+): Promise<void> => {
+  const client = clients.get(ws);
+  if (!client) return;
+
+  const data = await chattingRequestValidation(
+    chattingValidation.wsMessageHistoryMoreSchema,
+    payload,
+    sendError,
+    ws,
+  );
+  if (!data) {
+    sendError(ws, 'Invalid event structure');
+    return;
+  }
+
+  const { roomId, beforeMessageId } = data;
+  if (client.roomId !== roomId) {
+    sendError(ws, 'You are not in this room');
+    return;
+  }
+
+  const room = await findActiveRoom(roomId);
+  if (!room) {
+    sendError(ws, 'Room not found');
+    return;
+  }
+
+  const cursor = await prisma.message.findFirst({
+    where: {
+      id: beforeMessageId,
+      roomId: room.id,
+      ...activeRecordFilter,
+    },
+  });
+
+  if (!cursor) {
+    sendError(ws, 'Message not found');
+    return;
+  }
+
+  const { messages, hasMore } = await fetchMessagePage(
+    room.id,
+    cursor.createdAt,
+  );
+
+  send(ws, {
+    event: 'MESSAGE_HISTORY_MORE',
+    payload: { roomId: room.id, messages, hasMore },
+  });
+
+  await logActivity({
+    action: 'MESSAGE_HISTORY_READ',
+    roomId: room.id,
+    guestId: client.guestId,
+    ip: client.ip,
+    userAgent: client.userAgent,
+    metadata: {
+      count: messages.length,
+      hasMore,
+      beforeMessageId,
+    },
+  });
+};
+
 export const eventHandlers: Record<
   string,
   (ws: WebSocket, payload: unknown) => Promise<void>
@@ -372,4 +507,5 @@ export const eventHandlers: Record<
   MESSAGE_EDIT: handleMessageEdit,
   MESSAGE_DELETE: handleMessageDelete,
   CONVERSATION_LIST: handleConversationList,
+  MESSAGE_HISTORY_MORE: handleMessageHistoryMore,
 };

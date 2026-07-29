@@ -41,6 +41,13 @@ const wsConversationListSchema = z.object({
   body: z.object({}).passthrough(),
 });
 
+const wsMessageHistoryMoreSchema = z.object({
+  body: z.object({
+    roomId: z.string().min(1, 'roomId is required'),
+    beforeMessageId: z.string().min(1, 'beforeMessageId is required'),
+  }),
+});
+
 const wsEventSchema = z.object({
   body: z.object({
     event: z.enum([
@@ -49,6 +56,7 @@ const wsEventSchema = z.object({
       'MESSAGE_EDIT',
       'MESSAGE_DELETE',
       'CONVERSATION_LIST',
+      'MESSAGE_HISTORY_MORE',
     ]),
     payload: z.record(z.string(), z.any()),
   }),
@@ -61,4 +69,5 @@ export const chattingValidation = {
   wsEventSchema,
   wsMessageDeleteSchema,
   wsConversationListSchema,
+  wsMessageHistoryMoreSchema,
 };

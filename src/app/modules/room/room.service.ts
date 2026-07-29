@@ -19,6 +19,12 @@ import {
   findActiveRoomByIdOrInvite,
   roomIdOrInviteWhere,
 } from '../../utils/findRoom';
+import {
+  deleteFromCloudinary,
+  uploadToCloudinary,
+} from '../Upload/uploadToCloudinary';
+import { notifyConversationUpdate } from '../chatting/chatting.utils';
+import { isGuestOnline } from '../chatting/chatting.presence';
 
 const generateInviteCode = () => randomBytes(6).toString('base64url').slice(0, 8);
 
@@ -49,6 +55,20 @@ const assertRoomMember = async (roomId: string, guestId: string) => {
     throw new AppError(httpStatus.FORBIDDEN, 'You are not a member of this room');
   }
   return member;
+};
+
+/** Owner-only for now; swap/extend later for roles or shared editors. */
+const assertRoomOwner = (
+  room: { creatorGuestId: string },
+  guestId: string,
+  action = 'edit this room',
+) => {
+  if (room.creatorGuestId !== guestId) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      `Only the room owner can ${action}`,
+    );
+  }
 };
 
 const createRoom = catchAsync(async (req, res) => {
@@ -218,10 +238,18 @@ const getRoomMembers = catchAsync(async (req, res) => {
     .paginate()
     .execute();
 
+  const data = Array.isArray(result.data)
+    ? result.data.map((member: { guestId: string }) => ({
+        ...member,
+        isOnline: isGuestOnline(member.guestId),
+      }))
+    : result.data;
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     message: 'Room members retrieved successfully',
     ...result,
+    data,
   });
 });
 
@@ -238,12 +266,7 @@ const softDeleteRoom = catchAsync(async (req, res) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Room not found');
   }
 
-  if (room.creatorGuestId !== req.guest.id) {
-    throw new AppError(
-      httpStatus.FORBIDDEN,
-      'Only the creator can delete this room',
-    );
-  }
+  assertRoomOwner(room, req.guest.id, 'delete this room');
 
   const ip = getClientIpFromRequest(req);
   const userAgent =
@@ -285,12 +308,7 @@ const archiveRoom = catchAsync(async (req, res) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Room not found');
   }
 
-  if (room.creatorGuestId !== req.guest.id) {
-    throw new AppError(
-      httpStatus.FORBIDDEN,
-      'Only the creator can archive this room',
-    );
-  }
+  assertRoomOwner(room, req.guest.id, 'archive this room');
 
   const ip = getClientIpFromRequest(req);
   const userAgent =
@@ -318,11 +336,116 @@ const archiveRoom = catchAsync(async (req, res) => {
   });
 });
 
+const updateRoom = catchAsync(async (req, res) => {
+  if (!req.guest) {
+    throw new AppError(httpStatus.UNAUTHORIZED, 'Guest required');
+  }
+
+  const { roomId } = req.params;
+  const room = await assertActiveRoom(roomId);
+  assertRoomOwner(room, req.guest.id, 'edit this room');
+
+  const name =
+    typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  if (!name) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Room name is required');
+  }
+
+  const ip = getClientIpFromRequest(req);
+  const userAgent =
+    typeof req.headers['user-agent'] === 'string'
+      ? req.headers['user-agent']
+      : undefined;
+
+  const updated = await prisma.room.update({
+    where: { id: room.id },
+    data: { name },
+  });
+
+  await logActivity({
+    action: 'ROOM_UPDATE',
+    roomId: room.id,
+    guestId: req.guest.id,
+    ip,
+    userAgent,
+    metadata: { name },
+  });
+
+  await notifyConversationUpdate(room.id, {
+    name: updated.name,
+    image: updated.image,
+  });
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Room updated successfully',
+    data: updated,
+  });
+});
+
+const updateRoomImage = catchAsync(async (req, res) => {
+  if (!req.guest) {
+    throw new AppError(httpStatus.UNAUTHORIZED, 'Guest required');
+  }
+
+  const { roomId } = req.params;
+  const room = await assertActiveRoom(roomId);
+  assertRoomOwner(room, req.guest.id, 'edit this room');
+
+  const file = req.file;
+  if (!file) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Please provide an image');
+  }
+
+  const previousImg = room.image || '';
+  const uploaded = await uploadToCloudinary(file);
+  if (!uploaded.Location) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'Failed to upload image');
+  }
+
+  const ip = getClientIpFromRequest(req);
+  const userAgent =
+    typeof req.headers['user-agent'] === 'string'
+      ? req.headers['user-agent']
+      : undefined;
+
+  const updated = await prisma.room.update({
+    where: { id: room.id },
+    data: { image: uploaded.Location },
+  });
+
+  if (previousImg) {
+    await deleteFromCloudinary(previousImg);
+  }
+
+  await logActivity({
+    action: 'ROOM_UPDATE',
+    roomId: room.id,
+    guestId: req.guest.id,
+    ip,
+    userAgent,
+    metadata: { imageUpdated: true },
+  });
+
+  await notifyConversationUpdate(room.id, {
+    name: updated.name,
+    image: updated.image,
+  });
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Room image updated successfully',
+    data: updated,
+  });
+});
+
 export const RoomService = {
   createRoom,
   getRoomById,
   getMyRooms,
   getRoomMembers,
+  updateRoom,
+  updateRoomImage,
   softDeleteRoom,
   archiveRoom,
 };

@@ -11,6 +11,10 @@ import { chattingRequestValidation } from './chatting.validate.request';
 import { clients, roomSubscribers } from './chatting.state';
 import { eventHandlers } from './chatting.handler';
 import { broadcast } from './chatting.broadcast';
+import {
+  onGuestConnected,
+  onGuestDisconnected,
+} from './chatting.presence';
 import { prisma } from '../../utils/prisma';
 import { logActivity } from '../../utils/activityLogger';
 import { upsertGuest } from '../../utils/upsertGuest';
@@ -35,8 +39,13 @@ export const initWebSocketServer = (server: Server): void => {
       guestId: auth.guestId,
       displayName: null,
       roomId: null,
+      joinEpoch: 0,
       ip: auth.ip,
       userAgent: auth.userAgent,
+    });
+
+    onGuestConnected(auth.guestId).catch(error => {
+      console.error('[WS] presence connect notify failed', error);
     });
 
     ws.on('message', async raw => {
@@ -91,6 +100,8 @@ export const initWebSocketServer = (server: Server): void => {
 
     ws.on('close', async () => {
       const client = clients.get(ws);
+      const guestId = client?.guestId ?? auth.guestId;
+
       if (client?.roomId) {
         roomSubscribers.get(client.roomId)?.delete(ws);
 
@@ -124,6 +135,12 @@ export const initWebSocketServer = (server: Server): void => {
         });
       }
       clients.delete(ws);
+
+      try {
+        await onGuestDisconnected(guestId);
+      } catch (error) {
+        console.error('[WS] presence disconnect notify failed', error);
+      }
     });
 
     ws.on('error', err =>
