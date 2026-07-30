@@ -1,0 +1,76 @@
+version: "3.8"
+
+name: flexi-chat
+
+services:
+  postgres:
+    profiles: ["local"]
+    image: postgres:16-alpine
+    container_name: fc-production-db
+    hostname: postgres
+    ports:
+      - "8594:5432"
+    networks:
+      - app-network
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: FC@2026
+      POSTGRES_DB: fc_production
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fc_production"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  pgadmin:
+    profiles: ["local"]
+    image: dpage/pgadmin4:latest
+    container_name: fc-production-pgadmin
+    ports:
+      - "8595:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: fc@junayet.com
+      PGADMIN_DEFAULT_PASSWORD: FC@2026
+    networks:
+      - app-network
+    depends_on:
+      - postgres
+
+  redis:
+    image: redis:7-alpine
+    container_name: fc-production-redis
+    hostname: redis
+    ports:
+      - "8596:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  app-network:
+    driver: bridge
