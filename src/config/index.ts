@@ -1,7 +1,14 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
+const nodeEnv =
+  process.env.NODE_ENV === 'production' ? 'production' : 'development';
+
 dotenv.config({ path: path.join(process.cwd(), '.env') });
+dotenv.config({
+  path: path.join(process.cwd(), `.env.${nodeEnv}`),
+  override: true,
+});
 
 export default {
   env: process.env.NODE_ENV,

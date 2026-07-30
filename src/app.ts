@@ -6,6 +6,7 @@ import router from './app/routes';
 import path from 'path';
 import { html } from './htmldesign';
 import cookieParser from 'cookie-parser';
+import config from './config';
 // import requestLogger from './app/middlewares/requestLogger';
 
 const app: Application = express();
@@ -14,14 +15,7 @@ app.set('trust proxy', 1);
 
 app.use(
   cors({
-    origin: [
-      'http://localhost:3001',
-      'http://localhost:3000',
-      'http://localhost:4000',
-      'http://192.168.0.190:4000',
-      'http://172.252.13.78:3014',
-      'https://bretervin.tamshyah.com',
-    ],
+    origin: [config.base_url_client || 'http://localhost:4467'],
     credentials: true,
   }),
 );
