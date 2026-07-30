@@ -15,7 +15,7 @@ app.set('trust proxy', 1);
 
 app.use(
   cors({
-    origin: [config.base_url_client || 'http://localhost:4467'],
+    origin: config.cors_origins,
     credentials: true,
   }),
 );

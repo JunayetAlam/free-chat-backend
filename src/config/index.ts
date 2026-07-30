@@ -10,6 +10,18 @@ dotenv.config({
   override: true,
 });
 
+const LOCAL_CLIENT_URL = 'http://localhost:4467';
+const MAIN_CLIENT_URL = 'https://flexi-chat.junayetalam.me';
+
+/** Origins allowed for HTTP CORS and WebSocket connections. */
+export const corsOrigins = [
+  ...new Set(
+    [LOCAL_CLIENT_URL, MAIN_CLIENT_URL, process.env.BASE_URL_CLIENT].filter(
+      (origin): origin is string => Boolean(origin),
+    ),
+  ),
+];
+
 export default {
   env: process.env.NODE_ENV,
   project_name: process.env.PROJECT_NAME || '',
@@ -22,6 +34,7 @@ export default {
   mail_port: process.env.MAILTRAP_PORT,
   base_url_server: process.env.BASE_URL_SERVER,
   base_url_client: process.env.BASE_URL_CLIENT,
+  cors_origins: corsOrigins,
   jwt: {
     access_secret: process.env.JWT_ACCESS_SECRET,
     access_expires_in: process.env.JWT_ACCESS_EXPIRES_IN,

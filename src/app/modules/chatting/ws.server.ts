@@ -18,9 +18,22 @@ import {
 import { prisma } from '../../utils/prisma';
 import { logActivity } from '../../utils/activityLogger';
 import { upsertGuest } from '../../utils/upsertGuest';
+import { corsOrigins } from '../../../config';
 
 export const initWebSocketServer = (server: Server): void => {
-  const wss = new WebSocketServer({ server, path: '/ws' });
+  const wss = new WebSocketServer({
+    server,
+    path: '/ws',
+    verifyClient: ({ origin }, done) => {
+      // Allow non-browser clients with no Origin; browsers must match list.
+      if (!origin || corsOrigins.includes(origin)) {
+        done(true);
+        return;
+      }
+      console.warn(`[WS] rejecting connection: origin not allowed (${origin})`);
+      done(false, 403, 'Origin not allowed');
+    },
+  });
 
   wss.on('connection', async (ws: WebSocket, req: IncomingMessage) => {
     const auth = verifyGuestWsAuth(req);
