@@ -1,6 +1,6 @@
 import { IncomingMessage } from 'http';
 import { WebSocket } from 'ws';
-import cookieParser from 'cookie';
+import { parse as parseCookie } from 'cookie';
 import { Secret } from 'jsonwebtoken';
 import { ApiResponse, ConversationListItem, WsOutgoingEvent } from './type';
 import { verifyToken } from '../../utils/verifyToken';
@@ -168,7 +168,7 @@ export const notifyConversationUpdate = async (
 const getCookies = (req: IncomingMessage) => {
   const cookieHeader = req.headers.cookie;
   if (!cookieHeader) return {} as Record<string, string>;
-  const cookies = cookieParser.parseCookie(cookieHeader);
+  const cookies = parseCookie(cookieHeader);
   return cookies;
 };
 
@@ -237,11 +237,7 @@ export const verifyGuestWsAuth = (
     return null;
   }
 
-  if (
-    !fromQuery &&
-    cookieGuestId &&
-    cookieGuestId !== tokenGuestId
-  ) {
+  if (!fromQuery && cookieGuestId && cookieGuestId !== tokenGuestId) {
     console.warn('[WS] auth failed: cookie guestId mismatch', {
       cookieGuestId,
       tokenGuestId,

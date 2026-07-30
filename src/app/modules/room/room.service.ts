@@ -188,9 +188,8 @@ const getMyRooms = catchAsync(async (req, res) => {
   delete query.isArchived; // controlled below, not client-overridable for this endpoint
   delete query.isDeleted; // soft-deleted never returned (super-admin later)
 
-  // Scope to rooms where this guest is a member
-  query['members.some.guestId'] = req.guest.id;
-  query['members.some.isDeleted'] = false;
+  // Scope to rooms this guest created (joined-only rooms live on /joined-rooms)
+  query.creatorGuestId = req.guest.id;
 
   query.isDeleted = false; // globally hide soft-deleted rooms
   query.isArchived = archiveData; // true = archive list, false = active list

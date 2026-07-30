@@ -1,5 +1,5 @@
 model Room {
-  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  id                String    @id @default(uuid())
   name              String?
   image             String?
   inviteCode        String    @unique
@@ -27,8 +27,8 @@ model Room {
 }
 
 model RoomMember {
-  id          String    @id @default(auto()) @map("_id") @db.ObjectId
-  roomId      String    @db.ObjectId
+  id          String    @id @default(uuid())
+  roomId      String
   guestId     String
   displayName String
   joinIp      String?
@@ -54,15 +54,15 @@ model RoomMember {
 
 /** Per-guest room history: created once on first join; soft-deletable from history */
 model JoinedRoom {
-  id           String    @id @default(auto()) @map("_id") @db.ObjectId
-  roomId       String    @db.ObjectId
-  guestId      String
-  firstJoinedAt DateTime @default(now())
-  lastJoinedAt DateTime  @default(now())
-  joinIp       String?
-  userAgent    String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id            String    @id @default(uuid())
+  roomId        String
+  guestId       String
+  firstJoinedAt DateTime  @default(now())
+  lastJoinedAt  DateTime  @default(now())
+  joinIp        String?
+  userAgent     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   isDeleted  Boolean   @default(false)
   isArchived Boolean   @default(false)
@@ -79,8 +79,8 @@ model JoinedRoom {
 }
 
 model Message {
-  id                String    @id @default(auto()) @map("_id") @db.ObjectId
-  roomId            String    @db.ObjectId
+  id                String    @id @default(uuid())
+  roomId            String
   senderGuestId     String
   senderDisplayName String
   senderIp          String?

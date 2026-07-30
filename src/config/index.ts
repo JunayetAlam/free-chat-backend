@@ -7,6 +7,7 @@ export default {
   env: process.env.NODE_ENV,
   project_name: process.env.PROJECT_NAME || '',
   port: process.env.PORT,
+  database_url: process.env.DATABASE_URL,
   super_admin_password: process.env.SUPER_ADMIN_PASSWORD,
   bcrypt_salt_rounds: process.env.BCRYPT_SALT_ROUNDS,
   mail: process.env.MAILTRAP_USER,
@@ -19,6 +20,11 @@ export default {
     access_expires_in: process.env.JWT_ACCESS_EXPIRES_IN,
     refresh_secret: process.env.JWT_REFRESH_SECRET,
     refresh_expires_in: process.env.JWT_REFRESH_EXPIRES_IN,
+  },
+  redis: {
+    host: process.env.REDIS_HOST || '127.0.0.1',
+    port: Number(process.env.REDIS_PORT) || 8596,
+    password: process.env.REDIS_PASSWORD || undefined,
   },
   do_space: {
     endpoints: process.env.DO_SPACE_ENDPOINT,

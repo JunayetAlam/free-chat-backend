@@ -1,8 +1,8 @@
 model ActivityLog {
-  id        String         @id @default(auto()) @map("_id") @db.ObjectId
+  id        String         @id @default(uuid())
   action    ActivityAction
-  roomId    String?        @db.ObjectId
-  messageId String?        @db.ObjectId
+  roomId    String?
+  messageId String?
   guestId   String?
   ip        String?
   userAgent String?
