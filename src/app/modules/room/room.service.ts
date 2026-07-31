@@ -25,6 +25,11 @@ import {
 } from '../Upload/uploadToCloudinary';
 import { notifyConversationUpdate } from '../chatting/chatting.utils';
 import { isGuestOnline } from '../chatting/chatting.presence';
+import {
+  assertQuotaAvailable,
+  QUOTA_MAX,
+  roomQuotaPayload,
+} from '../../utils/dailyQuota';
 
 const generateInviteCode = () => randomBytes(6).toString('base64url').slice(0, 8);
 
@@ -194,6 +199,7 @@ const getRoomById = catchAsync(async (req, res) => {
     statusCode: httpStatus.OK,
     message: 'Room fetched successfully',
     data: roomWithLiveMembers,
+    quota: roomQuotaPayload(room),
   });
 });
 
@@ -399,6 +405,24 @@ const updateRoom = catchAsync(async (req, res) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Room name is required');
   }
 
+  const currentName = (room.name || '').trim();
+  if (name === currentName) {
+    sendResponse(res, {
+      statusCode: httpStatus.OK,
+      message: 'No room name change',
+      data: room,
+      quota: roomQuotaPayload(room),
+    });
+    return;
+  }
+
+  const bump = assertQuotaAvailable(
+    room.nameChangeCount,
+    room.nameChangeDay,
+    QUOTA_MAX.roomName,
+    `Daily room name limit reached (${QUOTA_MAX.roomName}/day). Try again after reset.`,
+  );
+
   const ip = getClientIpFromRequest(req);
   const userAgent =
     typeof req.headers['user-agent'] === 'string'
@@ -407,7 +431,11 @@ const updateRoom = catchAsync(async (req, res) => {
 
   const updated = await prisma.room.update({
     where: { id: room.id },
-    data: { name },
+    data: {
+      name,
+      nameChangeCount: bump.count,
+      nameChangeDay: bump.day,
+    },
   });
 
   await logActivity({
@@ -428,6 +456,7 @@ const updateRoom = catchAsync(async (req, res) => {
     statusCode: httpStatus.OK,
     message: 'Room updated successfully',
     data: updated,
+    quota: roomQuotaPayload(updated),
   });
 });
 
@@ -445,6 +474,13 @@ const updateRoomImage = catchAsync(async (req, res) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Please provide an image');
   }
 
+  const bump = assertQuotaAvailable(
+    room.imageChangeCount,
+    room.imageChangeDay,
+    QUOTA_MAX.roomImage,
+    `Daily room image limit reached (${QUOTA_MAX.roomImage}/day). Try again after reset.`,
+  );
+
   const previousImg = room.image || '';
   const uploaded = await uploadToCloudinary(file);
   if (!uploaded.Location) {
@@ -459,7 +495,11 @@ const updateRoomImage = catchAsync(async (req, res) => {
 
   const updated = await prisma.room.update({
     where: { id: room.id },
-    data: { image: uploaded.Location },
+    data: {
+      image: uploaded.Location,
+      imageChangeCount: bump.count,
+      imageChangeDay: bump.day,
+    },
   });
 
   if (previousImg) {
@@ -484,6 +524,7 @@ const updateRoomImage = catchAsync(async (req, res) => {
     statusCode: httpStatus.OK,
     message: 'Room image updated successfully',
     data: updated,
+    quota: roomQuotaPayload(updated),
   });
 });
 

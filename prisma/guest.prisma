@@ -10,6 +10,12 @@ model Guest {
   updatedAt    DateTime  @updatedAt
   lastSeenAt   DateTime  @default(now())
 
+  // Daily edit quotas (Asia/Dhaka calendar day in *ChangeDay)
+  profileNameChangeCount  Int     @default(0)
+  profileNameChangeDay    String?
+  profileImageChangeCount Int     @default(0)
+  profileImageChangeDay   String?
+
   isDeleted  Boolean   @default(false)
   isArchived Boolean   @default(false)
   deletedAt  DateTime?

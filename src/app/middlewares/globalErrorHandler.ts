@@ -80,7 +80,10 @@ const globalErrorHandler = (
   } else if (err instanceof AppError) {
     statusCode = err.statusCode;
     message = err.message;
-    errorDetails = { stack: err.stack };
+    errorDetails = {
+      ...(err.errorDetails || {}),
+      stack: err.stack,
+    };
   } else if (err instanceof Error) {
     if (err.name === 'TokenExpiredError') {
       statusCode = 401;

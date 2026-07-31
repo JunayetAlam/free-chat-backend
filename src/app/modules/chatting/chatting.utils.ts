@@ -272,7 +272,6 @@ export const verifyGuestWsAuth = (
 
   const extracted = extractGuestTokenFromWs(req);
   if (!extracted) {
-    console.warn('[WS] auth failed: no token');
     return null;
   }
 
@@ -293,21 +292,15 @@ export const verifyGuestWsAuth = (
         config.jwt.refresh_secret as Secret,
       );
     } catch {
-      console.warn('[WS] auth failed: token verify error');
       return null;
     }
   }
 
   if (!tokenGuestId) {
-    console.warn('[WS] auth failed: token missing guestId');
     return null;
   }
 
   if (!fromQuery && cookieGuestId && cookieGuestId !== tokenGuestId) {
-    console.warn('[WS] auth failed: cookie guestId mismatch', {
-      cookieGuestId,
-      tokenGuestId,
-    });
     return null;
   }
 

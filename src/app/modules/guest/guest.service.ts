@@ -14,6 +14,11 @@ import {
   uploadToCloudinary,
 } from '../Upload/uploadToCloudinary';
 import { broadcastGuestProfileUpdate } from '../chatting/chatting.utils';
+import {
+  assertQuotaAvailable,
+  guestQuotaPayload,
+  QUOTA_MAX,
+} from '../../utils/dailyQuota';
 
 const syncRoomMemberDisplayName = async (
   guestId: string,
@@ -59,6 +64,7 @@ const me = catchAsync(async (req, res) => {
     statusCode: httpStatus.OK,
     message: 'Guest fetched successfully',
     data: req.guest,
+    quota: guestQuotaPayload(req.guest),
   });
 });
 
@@ -72,29 +78,51 @@ const updateProfile = catchAsync(async (req, res) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'displayName is required');
   }
 
-  const guest = await upsertGuest({
-    guestId: req.guest.id,
-    displayName,
-    ip: getClientIpFromRequest(req),
-    userAgent:
-      typeof req.headers['user-agent'] === 'string'
-        ? req.headers['user-agent']
-        : undefined,
-  });
+  const currentName = (req.guest.displayName || '').trim();
+  const nameChanged = displayName !== currentName;
 
-  await syncRoomMemberDisplayName(guest.id, displayName);
-  await broadcastGuestProfileUpdate({
-    id: guest.id,
-    displayName: guest.displayName,
-    profilePhoto: guest.profilePhoto,
-  });
+  let guest = req.guest;
+
+  if (nameChanged) {
+    const bump = assertQuotaAvailable(
+      req.guest.profileNameChangeCount,
+      req.guest.profileNameChangeDay,
+      QUOTA_MAX.profileName,
+      `Daily profile name limit reached (${QUOTA_MAX.profileName}/day). Try again after reset.`,
+    );
+
+    guest = await prisma.guest.update({
+      where: { id: req.guest.id },
+      data: {
+        displayName,
+        profileNameChangeCount: bump.count,
+        profileNameChangeDay: bump.day,
+        lastIp: getClientIpFromRequest(req) ?? req.guest.lastIp,
+        userAgent:
+          typeof req.headers['user-agent'] === 'string'
+            ? req.headers['user-agent']
+            : req.guest.userAgent,
+        lastSeenAt: new Date(),
+      },
+    });
+
+    await syncRoomMemberDisplayName(guest.id, displayName);
+    await broadcastGuestProfileUpdate({
+      id: guest.id,
+      displayName: guest.displayName,
+      profilePhoto: guest.profilePhoto,
+    });
+  }
 
   setGuestCookies(res, { guestId: guest.id });
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
-    message: 'Guest profile updated successfully',
+    message: nameChanged
+      ? 'Guest profile updated successfully'
+      : 'No profile name change',
     data: guest,
+    quota: guestQuotaPayload(guest),
   });
 });
 
@@ -108,6 +136,13 @@ const updateProfileImage = catchAsync(async (req, res) => {
     throw new AppError(httpStatus.BAD_REQUEST, 'Please provide image');
   }
 
+  const bump = assertQuotaAvailable(
+    req.guest.profileImageChangeCount,
+    req.guest.profileImageChangeDay,
+    QUOTA_MAX.profileImage,
+    `Daily profile image limit reached (${QUOTA_MAX.profileImage}/day). Try again after reset.`,
+  );
+
   const previousImg = req.guest.profilePhoto || '';
   const uploaded = await uploadToCloudinary(file);
   if (!uploaded.Location) {
@@ -116,7 +151,11 @@ const updateProfileImage = catchAsync(async (req, res) => {
 
   const guest = await prisma.guest.update({
     where: { id: req.guest.id },
-    data: { profilePhoto: uploaded.Location },
+    data: {
+      profilePhoto: uploaded.Location,
+      profileImageChangeCount: bump.count,
+      profileImageChangeDay: bump.day,
+    },
   });
 
   if (previousImg) {
@@ -133,6 +172,7 @@ const updateProfileImage = catchAsync(async (req, res) => {
     statusCode: httpStatus.OK,
     message: 'Guest profile image updated successfully',
     data: guest,
+    quota: guestQuotaPayload(guest),
   });
 });
 

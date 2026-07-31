@@ -7,6 +7,7 @@ import path from 'path';
 import { html } from './htmldesign';
 import cookieParser from 'cookie-parser';
 import config from './config';
+import { globalApiLimiter } from './app/middlewares/rateLimiters';
 // import requestLogger from './app/middlewares/requestLogger';
 
 const app: Application = express();
@@ -29,7 +30,7 @@ app.get('/', (req: Request, res: Response) => {
   res.send(html('Free Chat (Server)'));
 });
 
-app.use('/api/v1', router);
+app.use('/api/v1', globalApiLimiter, router);
 
 app.use(globalErrorHandler);
 app.use('/upload', express.static(path.join(__dirname, 'app', 'upload')));

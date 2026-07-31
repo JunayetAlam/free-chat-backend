@@ -19,31 +19,43 @@ import { prisma } from '../../utils/prisma';
 import { logActivity } from '../../utils/activityLogger';
 import { upsertGuest } from '../../utils/upsertGuest';
 import { corsOrigins } from '../../../config';
+import { getClientIpFromWs } from '../../utils/getClientIp';
+import {
+  checkWsAllEventsLimit,
+  checkWsConnectionLimit,
+  checkWsEventLimit,
+} from './wsRateLimit';
 
 export const initWebSocketServer = (server: Server): void => {
   const wss = new WebSocketServer({
     server,
     path: '/ws',
-    verifyClient: ({ origin }, done) => {
+    verifyClient: (info, done) => {
+      const { origin, req } = info;
       // Allow non-browser clients with no Origin; browsers must match list.
-      if (!origin || corsOrigins.includes(origin)) {
-        done(true);
+      if (origin && !corsOrigins.includes(origin)) {
+        done(false, 403, 'Origin not allowed');
         return;
       }
-      console.warn(`[WS] rejecting connection: origin not allowed (${origin})`);
-      done(false, 403, 'Origin not allowed');
+
+      const ip = getClientIpFromWs(req) || 'unknown';
+      const connLimit = checkWsConnectionLimit(ip);
+      if (connLimit) {
+        done(false, 429, connLimit);
+        return;
+      }
+
+      done(true);
     },
   });
 
   wss.on('connection', async (ws: WebSocket, req: IncomingMessage) => {
     const auth = verifyGuestWsAuth(req);
     if (!auth) {
-      console.warn('[WS] rejecting connection: unauthorized');
       sendError(ws, 'Unauthorized: valid guest token and guestId required');
       ws.close(1008, 'Unauthorized');
       return;
     }
-    console.log(`[WS] connected guestId=${auth.guestId}`);
 
     // Register client and message handler synchronously before any awaits
     // so messages sent immediately after connect are not missed.
@@ -65,7 +77,6 @@ export const initWebSocketServer = (server: Server): void => {
       let parsed: unknown;
       try {
         parsed = JSON.parse(raw.toString());
-        console.log({ parsed });
       } catch {
         sendError(ws, 'Invalid JSON format');
         return;
@@ -80,6 +91,19 @@ export const initWebSocketServer = (server: Server): void => {
 
       if (eventParsed) {
         const { event, payload } = eventParsed;
+
+        const allLimit = checkWsAllEventsLimit(auth.guestId);
+        if (allLimit) {
+          sendError(ws, allLimit);
+          return;
+        }
+
+        const eventLimit = checkWsEventLimit(auth.guestId, event);
+        if (eventLimit) {
+          sendError(ws, eventLimit);
+          return;
+        }
+
         const handler = eventHandlers[event];
 
         if (!handler) {
