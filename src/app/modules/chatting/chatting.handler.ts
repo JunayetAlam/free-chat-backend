@@ -6,7 +6,9 @@ import {
   findActiveRoom,
   getConversationsForGuest,
   getRoomLastMessage,
+  messageSenderInclude,
   notifyConversationUpdate,
+  resolveLiveSenderDisplayName,
   send,
   sendError,
 } from './chatting.utils';
@@ -21,10 +23,7 @@ import { recordJoinedRoom } from '../../utils/recordJoinedRoom';
 
 const MESSAGE_PAGE_SIZE = 30;
 
-const fetchMessagePage = async (
-  roomId: string,
-  beforeCreatedAt?: Date,
-): Promise<{ messages: Awaited<ReturnType<typeof prisma.message.findMany>>; hasMore: boolean }> => {
+const fetchMessagePage = async (roomId: string, beforeCreatedAt?: Date) => {
   const rows = await prisma.message.findMany({
     where: {
       roomId,
@@ -33,6 +32,7 @@ const fetchMessagePage = async (
     },
     orderBy: { createdAt: 'desc' },
     take: MESSAGE_PAGE_SIZE + 1,
+    include: messageSenderInclude,
   });
 
   const hasMore = rows.length > MESSAGE_PAGE_SIZE;
@@ -239,6 +239,7 @@ export const handleMessageSend = async (
       senderIp: client.ip,
       content,
     },
+    include: messageSenderInclude,
   });
 
   await logActivity({
@@ -260,7 +261,8 @@ export const handleMessageSend = async (
     lastMessage: {
       content: message.content,
       createdAt: message.createdAt,
-      senderDisplayName: message.senderDisplayName,
+      senderDisplayName: resolveLiveSenderDisplayName(message),
+      senderGuestId: message.senderGuestId,
     },
   });
 };
@@ -317,6 +319,7 @@ export const handleMessageEdit = async (
       editedAt: new Date(),
       editedIp: client.ip,
     },
+    include: messageSenderInclude,
   });
 
   await logActivity({
@@ -386,6 +389,7 @@ export const handleMessageDelete = async (
   const deleted = await prisma.message.update({
     where: { id: messageId },
     data: softDeleteFields(client.guestId, client.ip),
+    include: messageSenderInclude,
   });
 
   await logActivity({

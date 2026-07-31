@@ -8,6 +8,7 @@ export type WsEventType =
   | 'MESSAGE_HISTORY_MORE'
   | 'CONVERSATION_LIST'
   | 'CONVERSATION_UPDATE'
+  | 'GUEST_PROFILE_UPDATE'
   | 'PRESENCE_UPDATE'
   | 'PRESENCE_SNAPSHOT'
   | 'ERROR';
@@ -58,6 +59,7 @@ export type ConversationListItem = {
     content: string;
     createdAt: Date;
     senderDisplayName: string;
+    senderGuestId: string;
   } | null;
 };
 

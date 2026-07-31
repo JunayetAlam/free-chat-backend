@@ -39,6 +39,24 @@ export type ConversationLastMessage = NonNullable<
   ConversationListItem['lastMessage']
 >;
 
+export const messageSenderInclude = {
+  sender: {
+    select: {
+      id: true,
+      displayName: true,
+      profilePhoto: true,
+    },
+  },
+} as const;
+
+export const resolveLiveSenderDisplayName = (message: {
+  senderDisplayName: string;
+  sender?: { displayName: string | null } | null;
+}): string => {
+  const live = message.sender?.displayName?.trim();
+  return live || message.senderDisplayName;
+};
+
 export const getRoomLastMessage = async (
   roomId: string,
 ): Promise<ConversationLastMessage | null> => {
@@ -52,6 +70,10 @@ export const getRoomLastMessage = async (
       content: true,
       createdAt: true,
       senderDisplayName: true,
+      senderGuestId: true,
+      sender: {
+        select: { displayName: true },
+      },
     },
   });
 
@@ -60,7 +82,8 @@ export const getRoomLastMessage = async (
   return {
     content: lastMessage.content,
     createdAt: lastMessage.createdAt,
-    senderDisplayName: lastMessage.senderDisplayName,
+    senderDisplayName: resolveLiveSenderDisplayName(lastMessage),
+    senderGuestId: lastMessage.senderGuestId,
   };
 };
 
@@ -147,6 +170,49 @@ export const broadcastToJoinedMembers = async (
   for (const client of clients.values()) {
     if (!guestIds.has(client.guestId)) continue;
     send(client.ws, event);
+  }
+};
+
+/**
+ * Sync WS client display names and notify joined members when a guest
+ * updates their profile name/photo.
+ */
+export const broadcastGuestProfileUpdate = async (guest: {
+  id: string;
+  displayName: string | null;
+  profilePhoto: string | null;
+}): Promise<void> => {
+  const liveName = guest.displayName?.trim() || null;
+
+  for (const client of clients.values()) {
+    if (client.guestId !== guest.id) continue;
+    if (liveName) client.displayName = liveName;
+  }
+
+  const memberships = await prisma.roomMember.findMany({
+    where: {
+      guestId: guest.id,
+      isDeleted: false,
+    },
+    select: { roomId: true },
+  });
+
+  if (memberships.length === 0) return;
+
+  const event: WsOutgoingEvent = {
+    event: 'GUEST_PROFILE_UPDATE',
+    payload: {
+      guestId: guest.id,
+      displayName: liveName,
+      profilePhoto: guest.profilePhoto,
+    },
+  };
+
+  const seen = new Set<string>();
+  for (const { roomId } of memberships) {
+    if (seen.has(roomId)) continue;
+    seen.add(roomId);
+    await broadcastToJoinedMembers(roomId, event);
   }
 };
 

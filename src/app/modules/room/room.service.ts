@@ -159,6 +159,12 @@ const getRoomById = catchAsync(async (req, res) => {
           joinedAt: true,
           lastReadAt: true,
           leftAt: true,
+          guest: {
+            select: {
+              displayName: true,
+              profilePhoto: true,
+            },
+          },
         },
       },
     },
@@ -168,10 +174,26 @@ const getRoomById = catchAsync(async (req, res) => {
     throw new AppError(httpStatus.NOT_FOUND, 'Room not found');
   }
 
+  const roomWithLiveMembers = {
+    ...room,
+    members: room.members.map(member => {
+      const liveName = member.guest?.displayName?.trim();
+      return {
+        id: member.id,
+        guestId: member.guestId,
+        displayName: liveName || member.displayName,
+        joinedAt: member.joinedAt,
+        lastReadAt: member.lastReadAt,
+        leftAt: member.leftAt,
+        profilePhoto: member.guest?.profilePhoto ?? null,
+      };
+    }),
+  };
+
   sendResponse(res, {
     statusCode: httpStatus.OK,
     message: 'Room fetched successfully',
-    data: room,
+    data: roomWithLiveMembers,
   });
 });
 
@@ -238,10 +260,37 @@ const getRoomMembers = catchAsync(async (req, res) => {
     .execute();
 
   const data = Array.isArray(result.data)
-    ? result.data.map((member: { guestId: string }) => ({
-        ...member,
-        isOnline: isGuestOnline(member.guestId),
-      }))
+    ? await (async () => {
+        const members = result.data as Array<{
+          guestId: string;
+          displayName: string;
+          [key: string]: unknown;
+        }>;
+        const guestIds = [...new Set(members.map(m => m.guestId))];
+        const guests =
+          guestIds.length === 0
+            ? []
+            : await prisma.guest.findMany({
+                where: { id: { in: guestIds } },
+                select: {
+                  id: true,
+                  displayName: true,
+                  profilePhoto: true,
+                },
+              });
+        const guestById = new Map(guests.map(g => [g.id, g]));
+
+        return members.map(member => {
+          const guest = guestById.get(member.guestId);
+          const liveName = guest?.displayName?.trim();
+          return {
+            ...member,
+            displayName: liveName || member.displayName,
+            profilePhoto: guest?.profilePhoto ?? null,
+            isOnline: isGuestOnline(member.guestId),
+          };
+        });
+      })()
     : result.data;
 
   sendResponse(res, {

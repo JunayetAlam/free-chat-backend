@@ -13,6 +13,17 @@ import {
   deleteFromCloudinary,
   uploadToCloudinary,
 } from '../Upload/uploadToCloudinary';
+import { broadcastGuestProfileUpdate } from '../chatting/chatting.utils';
+
+const syncRoomMemberDisplayName = async (
+  guestId: string,
+  displayName: string,
+) => {
+  await prisma.roomMember.updateMany({
+    where: { guestId },
+    data: { displayName },
+  });
+};
 
 const bootstrap = catchAsync(async (req, res) => {
   // Backend owns guest id: cookie → optional header → new UUID
@@ -71,6 +82,13 @@ const updateProfile = catchAsync(async (req, res) => {
         : undefined,
   });
 
+  await syncRoomMemberDisplayName(guest.id, displayName);
+  await broadcastGuestProfileUpdate({
+    id: guest.id,
+    displayName: guest.displayName,
+    profilePhoto: guest.profilePhoto,
+  });
+
   setGuestCookies(res, { guestId: guest.id });
 
   sendResponse(res, {
@@ -104,6 +122,12 @@ const updateProfileImage = catchAsync(async (req, res) => {
   if (previousImg) {
     await deleteFromCloudinary(previousImg);
   }
+
+  await broadcastGuestProfileUpdate({
+    id: guest.id,
+    displayName: guest.displayName,
+    profilePhoto: guest.profilePhoto,
+  });
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
