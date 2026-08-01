@@ -10,6 +10,7 @@ import { findActiveRoomByIdOrInvite } from '../../utils/findRoom';
 import { prisma } from '../../utils/prisma';
 import { activeRecordFilter } from '../../utils/softDelete';
 import { clients } from './chatting.state';
+import type { WsRateLimitResult } from './wsRateLimit';
 
 export const buildResponse = <T>(
   success: boolean,
@@ -33,6 +34,20 @@ export const send = (ws: WebSocket, event: WsOutgoingEvent): void => {
 
 export const sendError = (ws: WebSocket, message: string): void => {
   send(ws, { event: 'ERROR', payload: { message } });
+};
+
+export const sendRateLimitError = (
+  ws: WebSocket,
+  limit: WsRateLimitResult,
+): void => {
+  send(ws, {
+    event: 'ERROR',
+    payload: {
+      message: limit.message,
+      code: limit.code,
+      retryAfterMs: limit.retryAfterMs,
+    },
+  });
 };
 
 export type ConversationLastMessage = NonNullable<

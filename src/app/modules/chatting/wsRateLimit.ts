@@ -7,6 +7,14 @@ type Bucket = {
 
 const buckets = new Map<string, Bucket>();
 
+export type WsRateLimitCode = 'RATE_LIMIT_BURST' | 'RATE_LIMIT_WINDOW';
+
+export type WsRateLimitResult = {
+  code: WsRateLimitCode;
+  message: string;
+  retryAfterMs: number;
+};
+
 const getBucket = (key: string): Bucket => {
   let b = buckets.get(key);
   if (!b) {
@@ -22,38 +30,46 @@ const prune = (b: Bucket, windowMs: number, now: number) => {
 };
 
 /**
- * Returns null if allowed, or an error message if rate limited.
+ * Returns null if allowed, or structured rate-limit info if limited.
  */
 export const checkWindowLimit = (
   key: string,
   max: number,
   windowMs: number,
   now = Date.now(),
-): string | null => {
+): WsRateLimitResult | null => {
   const b = getBucket(key);
   prune(b, windowMs, now);
   if (b.hits.length >= max) {
     const oldest = b.hits[0] ?? now;
-    const retryMs = Math.max(1000, windowMs - (now - oldest));
-    return `Rate limit exceeded. Retry in about ${Math.ceil(retryMs / 1000)}s.`;
+    const retryAfterMs = Math.max(1000, windowMs - (now - oldest));
+    return {
+      code: 'RATE_LIMIT_WINDOW',
+      message: 'Too many requests. Please try again in a moment.',
+      retryAfterMs,
+    };
   }
   b.hits.push(now);
   return null;
 };
 
 /**
- * Enforces a minimum gap between accepts. Returns error message or null.
+ * Enforces a minimum gap between accepts. Returns structured limit or null.
  * Does not count toward window buckets by itself.
  */
 export const checkMinInterval = (
   key: string,
   minIntervalMs: number,
   now = Date.now(),
-): string | null => {
+): WsRateLimitResult | null => {
   const b = getBucket(key);
   if (b.lastAt > 0 && now - b.lastAt < minIntervalMs) {
-    const wait = minIntervalMs - (now - b.lastAt);
-    return `Sending too fast. Wait ${wait}ms.`;
+    const retryAfterMs = minIntervalMs - (now - b.lastAt);
+    return {
+      code: 'RATE_LIMIT_BURST',
+      message: "You're sending messages too quickly.",
+      retryAfterMs,
+    };
   }
   b.lastAt = now;
   return null;
@@ -73,14 +89,16 @@ export const WS_LIMITS = {
   conversationList: { max: 20, windowMs: MIN },
 } as const;
 
-export const checkWsConnectionLimit = (ip: string): string | null =>
+export const checkWsConnectionLimit = (ip: string): WsRateLimitResult | null =>
   checkWindowLimit(
     `ws:conn:${ip || 'unknown'}`,
     WS_LIMITS.connectionPerIp.max,
     WS_LIMITS.connectionPerIp.windowMs,
   );
 
-export const checkWsAllEventsLimit = (guestId: string): string | null =>
+export const checkWsAllEventsLimit = (
+  guestId: string,
+): WsRateLimitResult | null =>
   checkWindowLimit(
     `ws:all:${guestId}`,
     WS_LIMITS.allEventsPerGuest.max,
@@ -90,7 +108,7 @@ export const checkWsAllEventsLimit = (guestId: string): string | null =>
 export const checkWsEventLimit = (
   guestId: string,
   event: string,
-): string | null => {
+): WsRateLimitResult | null => {
   switch (event) {
     case 'MESSAGE_SEND': {
       const burst = checkMinInterval(

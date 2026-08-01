@@ -4,6 +4,7 @@ import {
   getConversationsForGuest,
   send,
   sendError,
+  sendRateLimitError,
   verifyGuestWsAuth,
 } from './chatting.utils';
 import { chattingValidation } from './chatting.validation';
@@ -41,7 +42,7 @@ export const initWebSocketServer = (server: Server): void => {
       const ip = getClientIpFromWs(req) || 'unknown';
       const connLimit = checkWsConnectionLimit(ip);
       if (connLimit) {
-        done(false, 429, connLimit);
+        done(false, 429, connLimit.message);
         return;
       }
 
@@ -94,13 +95,13 @@ export const initWebSocketServer = (server: Server): void => {
 
         const allLimit = checkWsAllEventsLimit(auth.guestId);
         if (allLimit) {
-          sendError(ws, allLimit);
+          sendRateLimitError(ws, allLimit);
           return;
         }
 
         const eventLimit = checkWsEventLimit(auth.guestId, event);
         if (eventLimit) {
-          sendError(ws, eventLimit);
+          sendRateLimitError(ws, eventLimit);
           return;
         }
 
