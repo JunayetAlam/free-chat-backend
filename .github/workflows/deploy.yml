@@ -21,7 +21,6 @@ name: Deploy Backend
 on:
   push:
     branches:
-      - master
       - main
 
 concurrency:
@@ -49,9 +48,9 @@ jobs:
             export PATH="/root/.bun/bin:/root/.nvm/versions/node/v24.15.0/bin:$PATH"
 
             cd "$DEPLOY_PATH"
-            git fetch origin master
-            git checkout master
-            git reset --hard origin/master
+            git fetch origin main
+            git checkout main
+            git reset --hard origin/main
             bun run prod:build
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
