@@ -11,7 +11,7 @@
     "start:dev": "NODE_ENV=development bun --watch src/server.ts",
     "check:types": "tsc --noEmit",
     "build": "tsc",
-    "prod:build": "bun install && bunx prisma generate && bun run build",
+    "prod:build": "bun install && bunx --bun prisma migrate dev && bunx --bun prisma generate && bun run build && pm2 restart 14",
     "gm": "ts-node gn-module.ts",
     "pgen:studio": "bunx --bun prisma generate && bunx --bun prisma studio --port 7548",
     "pm": "bunx --bun prisma migrate dev",

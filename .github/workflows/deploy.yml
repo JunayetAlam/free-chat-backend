@@ -1,0 +1,125 @@
+# Deploy backend to VPS on push to master.
+# Required GitHub Secrets (Settings → Secrets and variables → Actions):
+#   VPS_HOST            — server IP or hostname
+#   VPS_USER            — SSH username
+#   VPS_SSH_KEY         — private key authorized on the VPS (full PEM, including BEGIN/END lines)
+#   VPS_PORT            — SSH port (optional; defaults to 22)
+#   DEPLOY_PATH         — absolute path to the backend clone on the VPS
+#   TELEGRAM_BOT_TOKEN  — from @BotFather (/newbot)
+#   TELEGRAM_CHAT_ID    — your chat id after /start on the bot
+#
+# Do NOT commit these values into the repo. Store them only as GitHub Actions secrets.
+# VPS must already have: git clone at DEPLOY_PATH, Bun, .env with DB and app config,
+# and PM2 process id 14 for this app (restarted by prod:build).
+#
+# If you see "dial tcp ... i/o timeout": the runner cannot reach the VPS.
+# Open the SSH port in the VPS firewall / cloud security group to 0.0.0.0/0
+# (or GitHub Actions IP ranges), and confirm VPS_HOST + VPS_PORT are correct.
+
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - master
+      - main
+
+concurrency:
+  group: deploy-backend-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        id: deploy
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          timeout: 60s
+          command_timeout: 20m
+          envs: DEPLOY_PATH
+          script: |
+            set -euo pipefail
+            export PATH="/root/.bun/bin:/root/.nvm/versions/node/v24.15.0/bin:$PATH"
+
+            cd "$DEPLOY_PATH"
+            git fetch origin master
+            git checkout master
+            git reset --hard origin/master
+            bun run prod:build
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+
+      - name: Notify Telegram on success
+        if: success()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_CHAT_ID:-}" ]; then
+            echo "Telegram secrets are not set; skipping notification."
+            exit 0
+          fi
+
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          SHORT_SHA="$(echo "${GITHUB_SHA}" | cut -c1-7)"
+
+          MESSAGE="$(cat <<EOF
+          Backend deploy succeeded
+
+          Repo: ${GITHUB_REPOSITORY}
+          Branch: ${GITHUB_REF_NAME}
+          Commit: ${SHORT_SHA}
+          Actor: ${GITHUB_ACTOR}
+          Run: ${RUN_URL}
+          EOF
+          )"
+
+          MESSAGE="$(printf '%s\n' "$MESSAGE" | sed 's/^[[:space:]]*//')"
+
+          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${MESSAGE}" \
+            --data-urlencode "disable_web_page_preview=true"
+
+      - name: Notify Telegram on failure
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_CHAT_ID:-}" ]; then
+            echo "Telegram secrets are not set; skipping notification."
+            exit 0
+          fi
+
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          SHORT_SHA="$(echo "${GITHUB_SHA}" | cut -c1-7)"
+
+          MESSAGE="$(cat <<EOF
+          Backend deploy failed
+
+          Repo: ${GITHUB_REPOSITORY}
+          Branch: ${GITHUB_REF_NAME}
+          Commit: ${SHORT_SHA}
+          Actor: ${GITHUB_ACTOR}
+          Run: ${RUN_URL}
+          EOF
+          )"
+
+          MESSAGE="$(printf '%s\n' "$MESSAGE" | sed 's/^[[:space:]]*//')"
+
+          curl -sS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=${MESSAGE}" \
+            --data-urlencode "disable_web_page_preview=true"
