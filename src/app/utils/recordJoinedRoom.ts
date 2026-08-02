@@ -14,37 +14,28 @@ export const recordJoinedRoom = async ({
   ip,
   userAgent,
 }: RecordJoinedRoomInput) => {
-  const existing = await prisma.joinedRoom.findUnique({
+  const now = new Date();
+
+  return prisma.joinedRoom.upsert({
     where: {
       roomId_guestId: { roomId, guestId },
     },
-  });
-
-  const now = new Date();
-
-  if (existing) {
-    return prisma.joinedRoom.update({
-      where: { id: existing.id },
-      data: {
-        lastJoinedAt: now,
-        joinIp: ip ?? existing.joinIp,
-        userAgent: userAgent ?? existing.userAgent,
-        isDeleted: false,
-        deletedAt: null,
-        isArchived: false,
-        archivedAt: null,
-      },
-    });
-  }
-
-  return prisma.joinedRoom.create({
-    data: {
+    create: {
       roomId,
       guestId,
       joinIp: ip,
       userAgent,
       firstJoinedAt: now,
       lastJoinedAt: now,
+    },
+    update: {
+      lastJoinedAt: now,
+      ...(ip !== undefined ? { joinIp: ip } : {}),
+      ...(userAgent !== undefined ? { userAgent } : {}),
+      isDeleted: false,
+      deletedAt: null,
+      isArchived: false,
+      archivedAt: null,
     },
   });
 };

@@ -3,7 +3,6 @@ import { z } from 'zod';
 const wsRoomJoinSchema = z.object({
   body: z.object({
     roomId: z.string().min(1, 'roomId is required'),
-    displayName: z.string().trim().min(1).max(40).optional(),
   }),
 });
 

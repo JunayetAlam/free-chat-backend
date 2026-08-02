@@ -58,27 +58,26 @@ export const handleRoomJoin = async (
     return;
   }
 
-  const room = await findActiveRoom(data.roomId);
-  if (!room) {
-    sendError(ws, 'Room not found');
-    return;
-  }
-
   // Fast room switches start overlapping joins; only the latest epoch may
   // mutate subscription state or push MESSAGE_HISTORY (avoids URL thrashing).
   const joinEpoch = ++client.joinEpoch;
   const isCurrentJoin = () =>
     clients.get(ws) === client && client.joinEpoch === joinEpoch;
 
-  const displayName =
-    data.displayName?.trim() || client.displayName || undefined;
+  // Guest row is required for RoomMember FK; room lookup is independent — run both.
+  const [room, guest] = await Promise.all([
+    findActiveRoom(data.roomId),
+    upsertGuest({
+      guestId: client.guestId,
+      ip: client.ip,
+      userAgent: client.userAgent,
+    }),
+  ]);
 
-  const guest = await upsertGuest({
-    guestId: client.guestId,
-    displayName,
-    ip: client.ip,
-    userAgent: client.userAgent,
-  });
+  if (!room) {
+    sendError(ws, 'Room not found');
+    return;
+  }
 
   if (!isCurrentJoin()) return;
 
@@ -86,22 +85,25 @@ export const handleRoomJoin = async (
     guest.displayName || `Guest-${client.guestId.slice(0, 6)}`;
   client.displayName = resolvedName;
 
-  const existingMember = await prisma.roomMember.findUnique({
-    where: {
-      roomId_guestId: {
+  // Membership write and history read are independent — parallelize so the
+  // client gets MESSAGE_HISTORY without waiting on joinedRoom / activity logs.
+  const [{ messages: history, hasMore }] = await Promise.all([
+    fetchMessagePage(room.id),
+    prisma.roomMember.upsert({
+      where: {
+        roomId_guestId: {
+          roomId: room.id,
+          guestId: client.guestId,
+        },
+      },
+      create: {
         roomId: room.id,
         guestId: client.guestId,
+        joinIp: client.ip,
+        lastIp: client.ip,
+        userAgent: client.userAgent,
       },
-    },
-  });
-
-  if (!isCurrentJoin()) return;
-
-  if (existingMember) {
-    await prisma.roomMember.update({
-      where: { id: existingMember.id },
-      data: {
-        displayName: resolvedName,
+      update: {
         lastIp: client.ip,
         userAgent: client.userAgent,
         leftAt: null,
@@ -110,41 +112,47 @@ export const handleRoomJoin = async (
         isArchived: false,
         archivedAt: null,
       },
-    });
-  } else {
-    await prisma.roomMember.create({
-      data: {
-        roomId: room.id,
-        guestId: client.guestId,
-        displayName: resolvedName,
-        joinIp: client.ip,
-        lastIp: client.ip,
-        userAgent: client.userAgent,
-      },
-    });
-  }
-
-  if (!isCurrentJoin()) return;
-
-  await recordJoinedRoom({
-    roomId: room.id,
-    guestId: client.guestId,
-    ip: client.ip,
-    userAgent: client.userAgent,
-  });
+    }),
+  ]);
 
   if (!isCurrentJoin()) return;
 
   joinRoom(ws, room.id);
 
-  const { messages: history, hasMore } = await fetchMessagePage(room.id);
-
-  if (!isCurrentJoin()) return;
-
   send(ws, {
     event: 'MESSAGE_HISTORY',
     payload: { roomId: room.id, messages: history, hasMore },
   });
+
+  // Side effects after the client can render — do not block history delivery.
+  void recordJoinedRoom({
+    roomId: room.id,
+    guestId: client.guestId,
+    ip: client.ip,
+    userAgent: client.userAgent,
+  }).catch(error => {
+    console.error('[WS] recordJoinedRoom failed', error);
+  });
+
+  void logActivity({
+    action: 'MESSAGE_HISTORY_READ',
+    roomId: room.id,
+    guestId: client.guestId,
+    ip: client.ip,
+    userAgent: client.userAgent,
+    metadata: { count: history.length, hasMore },
+  });
+
+  void logActivity({
+    action: 'ROOM_JOIN',
+    roomId: room.id,
+    guestId: client.guestId,
+    ip: client.ip,
+    userAgent: client.userAgent,
+    metadata: { displayName: resolvedName },
+  });
+
+  if (!isCurrentJoin()) return;
 
   await sendPresenceSnapshot(ws, room.id);
 
@@ -162,26 +170,6 @@ export const handleRoomJoin = async (
     },
     ws,
   );
-
-  await logActivity({
-    action: 'MESSAGE_HISTORY_READ',
-    roomId: room.id,
-    guestId: client.guestId,
-    ip: client.ip,
-    userAgent: client.userAgent,
-    metadata: { count: history.length, hasMore },
-  });
-
-  await logActivity({
-    action: 'ROOM_JOIN',
-    roomId: room.id,
-    guestId: client.guestId,
-    ip: client.ip,
-    userAgent: client.userAgent,
-    metadata: { displayName: resolvedName },
-  });
-
-  if (!isCurrentJoin()) return;
 
   broadcast(
     room.id,
@@ -242,7 +230,7 @@ export const handleMessageSend = async (
     include: messageSenderInclude,
   });
 
-  await logActivity({
+  void logActivity({
     action: 'MESSAGE_CREATE',
     roomId: room.id,
     messageId: message.id,
@@ -252,18 +240,34 @@ export const handleMessageSend = async (
     metadata: { contentLength: content.length },
   });
 
-  await broadcastToJoinedMembers(room.id, {
-    event: 'MESSAGE_SEND',
-    payload: { message },
+  const roomGuests = await prisma.joinedRoom.findMany({
+    where: {
+      roomId,
+      isDeleted: false,
+      isArchived: false,
+    },
+    select: { guestId: true },
+  });
+  const guestIds = new Set(roomGuests.map(guest => guest.guestId));
+
+  await broadcastToJoinedMembers({
+    event: {
+      event: 'MESSAGE_SEND',
+      payload: { message },
+    },
+    guestIds,
   });
 
-  await notifyConversationUpdate(room.id, {
-    lastMessage: {
-      content: message.content,
-      createdAt: message.createdAt,
-      senderDisplayName: resolveLiveSenderDisplayName(message),
-      senderGuestId: message.senderGuestId,
+  await notifyConversationUpdate({
+    patch: {
+      lastMessage: {
+        content: message.content,
+        createdAt: message.createdAt,
+        senderDisplayName: resolveLiveSenderDisplayName(message),
+        senderGuestId: message.senderGuestId,
+      },
     },
+    guestIds,
   });
 };
 
@@ -322,7 +326,7 @@ export const handleMessageEdit = async (
     include: messageSenderInclude,
   });
 
-  await logActivity({
+  void logActivity({
     action: 'MESSAGE_EDIT',
     roomId,
     messageId,
@@ -335,13 +339,26 @@ export const handleMessageEdit = async (
     },
   });
 
-  await broadcastToJoinedMembers(roomId, {
-    event: 'MESSAGE_EDIT',
-    payload: { message: updated },
+  const roomGuests = await prisma.joinedRoom.findMany({
+    where: {
+      roomId,
+      isDeleted: false,
+      isArchived: false,
+    },
+    select: { guestId: true },
+  });
+  const guestIds = new Set(roomGuests.map(guest => guest.guestId));
+
+  await broadcastToJoinedMembers({
+    guestIds,
+    event: {
+      event: 'MESSAGE_EDIT',
+      payload: { message: updated },
+    },
   });
 
   const lastMessage = await getRoomLastMessage(roomId);
-  await notifyConversationUpdate(roomId, { lastMessage });
+  await notifyConversationUpdate({ patch: { lastMessage }, guestIds });
 };
 
 export const handleMessageDelete = async (
@@ -392,7 +409,7 @@ export const handleMessageDelete = async (
     include: messageSenderInclude,
   });
 
-  await logActivity({
+  void logActivity({
     action: 'MESSAGE_DELETE',
     roomId,
     messageId,
@@ -401,13 +418,26 @@ export const handleMessageDelete = async (
     userAgent: client.userAgent,
   });
 
-  await broadcastToJoinedMembers(roomId, {
-    event: 'MESSAGE_DELETE',
-    payload: { roomId, messageId, message: deleted },
+  const roomGuests = await prisma.joinedRoom.findMany({
+    where: {
+      roomId,
+      isDeleted: false,
+      isArchived: false,
+    },
+    select: { guestId: true },
+  });
+  const guestIds = new Set(roomGuests.map(guest => guest.guestId));
+
+  await broadcastToJoinedMembers({
+    guestIds,
+    event: {
+      event: 'MESSAGE_DELETE',
+      payload: { roomId, messageId, message: deleted },
+    },
   });
 
   const lastMessage = await getRoomLastMessage(roomId);
-  await notifyConversationUpdate(roomId, { lastMessage });
+  await notifyConversationUpdate({ patch: { lastMessage }, guestIds });
 };
 
 export const handleConversationList = async (
@@ -488,7 +518,7 @@ export const handleMessageHistoryMore = async (
     payload: { roomId: room.id, messages, hasMore },
   });
 
-  await logActivity({
+  void logActivity({
     action: 'MESSAGE_HISTORY_READ',
     roomId: room.id,
     guestId: client.guestId,

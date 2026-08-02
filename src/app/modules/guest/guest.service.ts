@@ -20,16 +20,6 @@ import {
   QUOTA_MAX,
 } from '../../utils/dailyQuota';
 
-const syncRoomMemberDisplayName = async (
-  guestId: string,
-  displayName: string,
-) => {
-  await prisma.roomMember.updateMany({
-    where: { guestId },
-    data: { displayName },
-  });
-};
-
 const bootstrap = catchAsync(async (req, res) => {
   // Backend owns guest id: cookie → optional header → new UUID
   const guestId = resolveGuestId(req);
@@ -106,7 +96,6 @@ const updateProfile = catchAsync(async (req, res) => {
       },
     });
 
-    await syncRoomMemberDisplayName(guest.id, displayName);
     await broadcastGuestProfileUpdate({
       id: guest.id,
       displayName: guest.displayName,

@@ -1,18 +1,18 @@
 model Room {
-  id                String    @id @default(uuid())
-  name              String?
-  image             String?
-  inviteCode        String    @unique
-  creatorGuestId    String
-  creatorIp         String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id             String   @id @default(uuid())
+  name           String?
+  image          String?
+  inviteCode     String   @unique
+  creatorGuestId String
+  creatorIp      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   // Daily edit quotas (Asia/Dhaka calendar day in *ChangeDay)
-  nameChangeCount   Int       @default(0)
-  nameChangeDay     String?
-  imageChangeCount  Int       @default(0)
-  imageChangeDay    String?
+  nameChangeCount  Int     @default(0)
+  nameChangeDay    String?
+  imageChangeCount Int     @default(0)
+  imageChangeDay   String?
 
   isDeleted         Boolean   @default(false)
   isArchived        Boolean   @default(false)
@@ -33,17 +33,16 @@ model Room {
 }
 
 model RoomMember {
-  id          String    @id @default(uuid())
-  roomId      String
-  guestId     String
-  displayName String
-  joinIp      String?
-  lastIp      String?
-  userAgent   String?
-  lastReadAt  DateTime?
-  joinedAt    DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  leftAt      DateTime?
+  id         String    @id @default(uuid())
+  roomId     String
+  guestId    String
+  joinIp     String?
+  lastIp     String?
+  userAgent  String?
+  lastReadAt DateTime?
+  joinedAt   DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  leftAt     DateTime?
 
   isDeleted  Boolean   @default(false)
   isArchived Boolean   @default(false)
@@ -58,17 +57,19 @@ model RoomMember {
   @@map("room_members")
 }
 
-/** Per-guest room history: created once on first join; soft-deletable from history */
+/**
+ * Per-guest room history: created once on first join; soft-deletable from history
+ */
 model JoinedRoom {
-  id            String    @id @default(uuid())
+  id            String   @id @default(uuid())
   roomId        String
   guestId       String
-  firstJoinedAt DateTime  @default(now())
-  lastJoinedAt  DateTime  @default(now())
+  firstJoinedAt DateTime @default(now())
+  lastJoinedAt  DateTime @default(now())
   joinIp        String?
   userAgent     String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   isDeleted  Boolean   @default(false)
   isArchived Boolean   @default(false)
@@ -81,6 +82,7 @@ model JoinedRoom {
   @@unique([roomId, guestId])
   @@index([guestId, isDeleted])
   @@index([roomId])
+  @@index([roomId, isDeleted, isArchived])
   @@map("joined_rooms")
 }
 

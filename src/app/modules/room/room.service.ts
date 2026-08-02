@@ -31,7 +31,8 @@ import {
   roomQuotaPayload,
 } from '../../utils/dailyQuota';
 
-const generateInviteCode = () => randomBytes(6).toString('base64url').slice(0, 8);
+const generateInviteCode = () =>
+  randomBytes(6).toString('base64url').slice(0, 8);
 
 const parseBoolQuery = (value: unknown): boolean | undefined => {
   if (value === undefined || value === null || value === '') return undefined;
@@ -57,7 +58,10 @@ const assertRoomMember = async (roomId: string, guestId: string) => {
     },
   });
   if (!member) {
-    throw new AppError(httpStatus.FORBIDDEN, 'You are not a member of this room');
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      'You are not a member of this room',
+    );
   }
   return member;
 };
@@ -110,10 +114,6 @@ const createRoom = catchAsync(async (req, res) => {
       members: {
         create: {
           guestId: req.guest.id,
-          displayName:
-            displayName ||
-            req.guest.displayName ||
-            `Guest-${req.guest.id.slice(0, 6)}`,
           joinIp: ip,
           lastIp: ip,
           userAgent,
@@ -160,7 +160,6 @@ const getRoomById = catchAsync(async (req, res) => {
         select: {
           id: true,
           guestId: true,
-          displayName: true,
           joinedAt: true,
           lastReadAt: true,
           leftAt: true,
@@ -186,7 +185,7 @@ const getRoomById = catchAsync(async (req, res) => {
       return {
         id: member.id,
         guestId: member.guestId,
-        displayName: liveName || member.displayName,
+        displayName: liveName || `Guest-${member.guestId.slice(0, 6)}`,
         joinedAt: member.joinedAt,
         lastReadAt: member.lastReadAt,
         leftAt: member.leftAt,
@@ -257,7 +256,7 @@ const getRoomMembers = catchAsync(async (req, res) => {
 
   const membersQuery = new QueryBuilder(prisma.roomMember, query);
   const result = await membersQuery
-    .search(['displayName', 'guestId'])
+    .search(['guest.displayName', 'guestId'])
     .filter()
     .sort()
     .fields()
@@ -269,7 +268,6 @@ const getRoomMembers = catchAsync(async (req, res) => {
     ? await (async () => {
         const members = result.data as Array<{
           guestId: string;
-          displayName: string;
           [key: string]: unknown;
         }>;
         const guestIds = [...new Set(members.map(m => m.guestId))];
@@ -291,7 +289,7 @@ const getRoomMembers = catchAsync(async (req, res) => {
           const liveName = guest?.displayName?.trim();
           return {
             ...member,
-            displayName: liveName || member.displayName,
+            displayName: liveName || `Guest-${member.guestId.slice(0, 6)}`,
             profilePhoto: guest?.profilePhoto ?? null,
             isOnline: isGuestOnline(member.guestId),
           };
@@ -399,8 +397,7 @@ const updateRoom = catchAsync(async (req, res) => {
   const room = await assertActiveRoom(roomId);
   assertRoomOwner(room, req.guest.id, 'edit this room');
 
-  const name =
-    typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+  const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
   if (!name) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Room name is required');
   }
@@ -447,9 +444,12 @@ const updateRoom = catchAsync(async (req, res) => {
     metadata: { name },
   });
 
-  await notifyConversationUpdate(room.id, {
-    name: updated.name,
-    image: updated.image,
+  await notifyConversationUpdate({
+    roomId: room.id,
+    patch: {
+      name: updated.name ?? undefined,
+      image: updated.image ?? undefined,
+    },
   });
 
   sendResponse(res, {
@@ -515,9 +515,12 @@ const updateRoomImage = catchAsync(async (req, res) => {
     metadata: { imageUpdated: true },
   });
 
-  await notifyConversationUpdate(room.id, {
-    name: updated.name,
-    image: updated.image,
+  await notifyConversationUpdate({
+    roomId: room.id,
+    patch: {
+      name: updated.name ?? undefined,
+      image: updated.image ?? undefined,
+    },
   });
 
   sendResponse(res, {

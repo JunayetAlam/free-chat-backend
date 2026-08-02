@@ -25,30 +25,9 @@ export const upsertGuest = async ({
   const now = new Date();
   const trimmedName = displayName?.trim();
 
-  const existing = await prisma.guest.findUnique({ where: { id: guestId } });
-
-  if (existing) {
-    const nextDisplayName =
-      trimmedName ||
-      existing.displayName ||
-      buildDummyDisplayName(guestId);
-
-    return prisma.guest.update({
-      where: { id: guestId },
-      data: {
-        displayName: nextDisplayName,
-        lastIp: ip ?? existing.lastIp,
-        userAgent: userAgent ?? existing.userAgent,
-        deviceLabel: deviceLabel ?? existing.deviceLabel,
-        lastSeenAt: now,
-        isDeleted: false,
-        deletedAt: null,
-      },
-    });
-  }
-
-  return prisma.guest.create({
-    data: {
+  return prisma.guest.upsert({
+    where: { id: guestId },
+    create: {
       id: guestId,
       displayName: trimmedName || buildDummyDisplayName(guestId),
       createdIp: ip,
@@ -56,6 +35,15 @@ export const upsertGuest = async ({
       userAgent,
       deviceLabel,
       lastSeenAt: now,
+    },
+    update: {
+      ...(trimmedName ? { displayName: trimmedName } : {}),
+      ...(ip !== undefined ? { lastIp: ip } : {}),
+      ...(userAgent !== undefined ? { userAgent } : {}),
+      ...(deviceLabel !== undefined ? { deviceLabel } : {}),
+      lastSeenAt: now,
+      isDeleted: false,
+      deletedAt: null,
     },
   });
 };

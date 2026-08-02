@@ -121,7 +121,12 @@ export const getConversationsForGuest = async (
       isArchived: false,
       room: { isDeleted: false },
     },
-    include: {
+    select: {
+      id: true,
+      roomId: true,
+      guestId: true,
+      firstJoinedAt: true,
+      lastJoinedAt: true,
       room: {
         select: {
           id: true,
@@ -175,15 +180,21 @@ const getJoinedGuestIds = async (roomId: string): Promise<Set<string>> => {
  * Deliver a WS event to every connected guest who has joined this room
  * (not only the currently focused room subscribers).
  */
-export const broadcastToJoinedMembers = async (
-  roomId: string,
-  event: WsOutgoingEvent,
-): Promise<void> => {
-  const guestIds = await getJoinedGuestIds(roomId);
-  if (guestIds.size === 0) return;
+export const broadcastToJoinedMembers = async ({
+  roomId,
+  event,
+  guestIds,
+}: {
+  roomId?: string;
+  event: WsOutgoingEvent;
+  guestIds?: Set<string>;
+}): Promise<void> => {
+  const latestGuestIds =
+    guestIds ?? (roomId ? await getJoinedGuestIds(roomId) : new Set<string>());
+  if (latestGuestIds.size === 0) return;
 
   for (const client of clients.values()) {
-    if (!guestIds.has(client.guestId)) continue;
+    if (!latestGuestIds.has(client.guestId)) continue;
     send(client.ws, event);
   }
 };
@@ -223,26 +234,46 @@ export const broadcastGuestProfileUpdate = async (guest: {
     },
   };
 
-  const seen = new Set<string>();
-  for (const { roomId } of memberships) {
-    if (seen.has(roomId)) continue;
-    seen.add(roomId);
-    await broadcastToJoinedMembers(roomId, event);
-  }
+  const roomIds = [...new Set(memberships.map(m => m.roomId))];
+  if (roomIds.length === 0) return;
+
+  const rows = await prisma.joinedRoom.findMany({
+    where: {
+      roomId: { in: roomIds },
+      isDeleted: false,
+      isArchived: false,
+    },
+    select: { guestId: true },
+    distinct: ['guestId'],
+  });
+
+  await broadcastToJoinedMembers({
+    guestIds: new Set(rows.map(r => r.guestId)),
+    event,
+  });
 };
 
 /** Push sidebar preview / room meta to every connected guest who joined this room. */
-export const notifyConversationUpdate = async (
-  roomId: string,
+export const notifyConversationUpdate = async ({
+  roomId,
+  patch,
+  guestIds,
+}: {
+  roomId?: string;
   patch: {
     lastMessage?: ConversationLastMessage | null;
     name?: string | null;
     image?: string | null;
-  },
-): Promise<void> => {
-  await broadcastToJoinedMembers(roomId, {
-    event: 'CONVERSATION_UPDATE',
-    payload: { roomId, ...patch },
+  };
+  guestIds?: Set<string>;
+}): Promise<void> => {
+  await broadcastToJoinedMembers({
+    roomId,
+    event: {
+      event: 'CONVERSATION_UPDATE',
+      payload: { roomId, ...patch },
+    },
+    guestIds,
   });
 };
 
@@ -290,8 +321,6 @@ export const verifyGuestWsAuth = (
     return null;
   }
 
-  const { token, fromQuery } = extracted;
-
   const tryDecode = (tok: string, secret: Secret) => {
     const decoded = verifyToken(tok, secret);
     return (decoded.guestId as string) || null;
@@ -299,11 +328,14 @@ export const verifyGuestWsAuth = (
 
   let tokenGuestId: string | null = null;
   try {
-    tokenGuestId = tryDecode(token, config.jwt.access_secret as Secret);
+    tokenGuestId = tryDecode(
+      extracted.token,
+      config.jwt.access_secret as Secret,
+    );
   } catch {
     try {
       tokenGuestId = tryDecode(
-        cookies.refreshToken || token,
+        cookies.refreshToken || extracted.token,
         config.jwt.refresh_secret as Secret,
       );
     } catch {
@@ -315,7 +347,7 @@ export const verifyGuestWsAuth = (
     return null;
   }
 
-  if (!fromQuery && cookieGuestId && cookieGuestId !== tokenGuestId) {
+  if (!extracted.fromQuery && cookieGuestId && cookieGuestId !== tokenGuestId) {
     return null;
   }
 
