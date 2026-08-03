@@ -1,5 +1,6 @@
 export type WsEventType =
   | 'ROOM_JOIN'
+  | 'ROOM_UNFOCUS'
   | 'ROOM_LEAVE'
   | 'MESSAGE_SEND'
   | 'MESSAGE_EDIT'
@@ -20,6 +21,11 @@ export interface WsBaseEvent {
 export interface WsRoomJoinEvent extends WsBaseEvent {
   event: 'ROOM_JOIN';
   payload: { roomId: string; displayName?: string };
+}
+
+export interface WsRoomUnfocusEvent extends WsBaseEvent {
+  event: 'ROOM_UNFOCUS';
+  payload: { roomId: string };
 }
 
 export interface WsMessageSendEvent extends WsBaseEvent {
@@ -55,6 +61,9 @@ export type ConversationListItem = {
   creatorGuestId: string;
   firstJoinedAt: Date;
   lastJoinedAt: Date;
+  lastOpenedAt: Date | null;
+  leftAt: Date | null;
+  isUnread: boolean;
   lastMessage: {
     content: string;
     createdAt: Date;
@@ -65,6 +74,7 @@ export type ConversationListItem = {
 
 export type WsIncomingEvent =
   | WsRoomJoinEvent
+  | WsRoomUnfocusEvent
   | WsMessageSendEvent
   | WsMessageEditEvent
   | WsMessageDeleteEvent

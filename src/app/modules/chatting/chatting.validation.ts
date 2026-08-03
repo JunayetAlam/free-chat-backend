@@ -6,6 +6,12 @@ const wsRoomJoinSchema = z.object({
   }),
 });
 
+const wsRoomUnfocusSchema = z.object({
+  body: z.object({
+    roomId: z.string().min(1, 'roomId is required'),
+  }),
+});
+
 const wsMessageDeleteSchema = z.object({
   body: z.object({
     roomId: z.string().min(1, 'roomId is required'),
@@ -51,6 +57,7 @@ const wsEventSchema = z.object({
   body: z.object({
     event: z.enum([
       'ROOM_JOIN',
+      'ROOM_UNFOCUS',
       'MESSAGE_SEND',
       'MESSAGE_EDIT',
       'MESSAGE_DELETE',
@@ -63,6 +70,7 @@ const wsEventSchema = z.object({
 
 export const chattingValidation = {
   wsRoomJoinSchema,
+  wsRoomUnfocusSchema,
   wsMessageSendSchema,
   wsMessageEditSchema,
   wsEventSchema,

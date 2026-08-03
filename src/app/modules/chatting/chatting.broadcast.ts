@@ -2,6 +2,8 @@ import { WebSocket } from 'ws';
 import { WsOutgoingEvent } from './type';
 import { send } from './chatting.utils';
 import { clients, roomSubscribers } from './chatting.state';
+import { prisma } from '../../utils/prisma';
+import { logActivity } from '../../utils/activityLogger';
 
 export const broadcast = (
   roomId: string,
@@ -35,4 +37,46 @@ export const joinRoom = (ws: WebSocket, roomId: string): void => {
     roomSubscribers.set(roomId, new Set());
   }
   roomSubscribers.get(roomId)!.add(ws);
+};
+
+/**
+ * Drop live room subscription and stamp leftAt. Does not touch lastOpenedAt
+ * or membership soft-delete flags.
+ */
+export const unfocusRoom = async (ws: WebSocket): Promise<void> => {
+  const client = clients.get(ws);
+  if (!client?.roomId) return;
+
+  const roomId = client.roomId;
+  roomSubscribers.get(roomId)?.delete(ws);
+  client.roomId = null;
+
+  try {
+    await prisma.roomMember.updateMany({
+      where: {
+        roomId,
+        guestId: client.guestId,
+      },
+      data: { leftAt: new Date() },
+    });
+
+    await logActivity({
+      action: 'ROOM_LEAVE',
+      roomId,
+      guestId: client.guestId,
+      ip: client.ip,
+      userAgent: client.userAgent,
+    });
+  } catch (error) {
+    console.error('[WS] unfocusRoom cleanup failed', error);
+  }
+
+  broadcast(roomId, {
+    event: 'ROOM_LEAVE',
+    payload: {
+      roomId,
+      guestId: client.guestId,
+      message: 'A user left the room',
+    },
+  });
 };

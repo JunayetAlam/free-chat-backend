@@ -110,6 +110,25 @@ const conversationActivityTime = (item: ConversationListItem): number => {
   return new Date(item.firstJoinedAt).getTime();
 };
 
+const coveredByStamp = (
+  stamp: Date | null | undefined,
+  messageAt: Date,
+): boolean => stamp != null && stamp >= messageAt;
+
+/** Unread when last message is newer than both open and leave watermarks. */
+export const computeIsUnread = (
+  lastMessage: ConversationLastMessage | null,
+  lastOpenedAt: Date | null | undefined,
+  leftAt: Date | null | undefined,
+): boolean => {
+  if (!lastMessage) return false;
+  const msgAt = new Date(lastMessage.createdAt);
+  return (
+    !coveredByStamp(lastOpenedAt ?? null, msgAt) &&
+    !coveredByStamp(leftAt ?? null, msgAt)
+  );
+};
+
 /** Durable conversation list from JoinedRoom (not in-memory WS maps). */
 export const getConversationsForGuest = async (
   guestId: string,
@@ -139,9 +158,33 @@ export const getConversationsForGuest = async (
     },
   });
 
+  const roomIds = joined.map(row => row.roomId);
+  const memberships =
+    roomIds.length === 0
+      ? []
+      : await prisma.roomMember.findMany({
+          where: {
+            guestId,
+            roomId: { in: roomIds },
+            isDeleted: false,
+          },
+          select: {
+            roomId: true,
+            lastOpenedAt: true,
+            leftAt: true,
+          },
+        });
+
+  const membershipByRoom = new Map(
+    memberships.map(m => [m.roomId, m] as const),
+  );
+
   const conversations = await Promise.all(
     joined.map(async (row): Promise<ConversationListItem> => {
       const lastMessage = await getRoomLastMessage(row.roomId);
+      const membership = membershipByRoom.get(row.roomId);
+      const lastOpenedAt = membership?.lastOpenedAt ?? null;
+      const leftAt = membership?.leftAt ?? null;
 
       return {
         roomId: row.roomId,
@@ -151,6 +194,9 @@ export const getConversationsForGuest = async (
         creatorGuestId: row.room.creatorGuestId,
         firstJoinedAt: row.firstJoinedAt,
         lastJoinedAt: row.lastJoinedAt,
+        lastOpenedAt,
+        leftAt,
+        isUnread: computeIsUnread(lastMessage, lastOpenedAt, leftAt),
         lastMessage,
       };
     }),
@@ -259,7 +305,7 @@ export const notifyConversationUpdate = async ({
   patch,
   guestIds,
 }: {
-  roomId?: string;
+  roomId: string;
   patch: {
     lastMessage?: ConversationLastMessage | null;
     name?: string | null;

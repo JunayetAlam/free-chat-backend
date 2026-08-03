@@ -161,7 +161,7 @@ const getRoomById = catchAsync(async (req, res) => {
           id: true,
           guestId: true,
           joinedAt: true,
-          lastReadAt: true,
+          lastOpenedAt: true,
           leftAt: true,
           guest: {
             select: {
@@ -187,7 +187,7 @@ const getRoomById = catchAsync(async (req, res) => {
         guestId: member.guestId,
         displayName: liveName || `Guest-${member.guestId.slice(0, 6)}`,
         joinedAt: member.joinedAt,
-        lastReadAt: member.lastReadAt,
+        lastOpenedAt: member.lastOpenedAt,
         leftAt: member.leftAt,
         profilePhoto: member.guest?.profilePhoto ?? null,
       };

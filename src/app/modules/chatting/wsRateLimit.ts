@@ -85,6 +85,7 @@ export const WS_LIMITS = {
   messageEdit: { max: 20, windowMs: MIN },
   messageDelete: { max: 20, windowMs: MIN },
   roomJoin: { max: 20, windowMs: MIN },
+  roomJoinBurstMs: 600,
   historyMore: { max: 30, windowMs: MIN },
   conversationList: { max: 20, windowMs: MIN },
 } as const;
@@ -134,12 +135,23 @@ export const checkWsEventLimit = (
         WS_LIMITS.messageDelete.max,
         WS_LIMITS.messageDelete.windowMs,
       );
-    case 'ROOM_JOIN':
+    case 'ROOM_JOIN': {
+      const burst = checkMinInterval(
+        `ws:joinburst:${guestId}`,
+        WS_LIMITS.roomJoinBurstMs,
+      );
+      if (burst) {
+        return {
+          ...burst,
+          message: "You're switching rooms too quickly.",
+        };
+      }
       return checkWindowLimit(
         `ws:join:${guestId}`,
         WS_LIMITS.roomJoin.max,
         WS_LIMITS.roomJoin.windowMs,
       );
+    }
     case 'MESSAGE_HISTORY_MORE':
       return checkWindowLimit(
         `ws:hist:${guestId}`,

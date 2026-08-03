@@ -2,7 +2,6 @@ import { WebSocket } from 'ws';
 import { chattingValidation } from './chatting.validation';
 import { chattingRequestValidation } from './chatting.validate.request';
 import {
-  broadcastToJoinedMembers,
   findActiveRoom,
   getConversationsForGuest,
   getRoomLastMessage,
@@ -12,7 +11,7 @@ import {
   send,
   sendError,
 } from './chatting.utils';
-import { broadcast, joinRoom } from './chatting.broadcast';
+import { broadcast, joinRoom, unfocusRoom } from './chatting.broadcast';
 import { clients } from './chatting.state';
 import { sendPresenceSnapshot } from './chatting.presence';
 import { prisma } from '../../utils/prisma';
@@ -102,11 +101,12 @@ export const handleRoomJoin = async (
         joinIp: client.ip,
         lastIp: client.ip,
         userAgent: client.userAgent,
+        lastOpenedAt: new Date(),
       },
       update: {
         lastIp: client.ip,
         userAgent: client.userAgent,
-        leftAt: null,
+        lastOpenedAt: new Date(),
         isDeleted: false,
         deletedAt: null,
         isArchived: false,
@@ -116,6 +116,11 @@ export const handleRoomJoin = async (
   ]);
 
   if (!isCurrentJoin()) return;
+
+  // Leaving another focused room: stamp leftAt before focusing the new one.
+  if (client.roomId && client.roomId !== room.id) {
+    await unfocusRoom(ws);
+  }
 
   joinRoom(ws, room.id);
 
@@ -186,6 +191,35 @@ export const handleRoomJoin = async (
   );
 };
 
+export const handleRoomUnfocus = async (
+  ws: WebSocket,
+  payload: unknown,
+): Promise<void> => {
+  const client = clients.get(ws);
+  if (!client) return;
+
+  const data = await chattingRequestValidation(
+    chattingValidation.wsRoomUnfocusSchema,
+    payload,
+    sendError,
+    ws,
+  );
+  if (!data?.roomId) {
+    sendError(ws, 'Invalid event structure');
+    return;
+  }
+
+  if (!client.roomId) return;
+
+  // Allow invite code or room id from the client.
+  const room = await findActiveRoom(data.roomId);
+  if (!room || client.roomId !== room.id) {
+    return;
+  }
+
+  await unfocusRoom(ws);
+};
+
 export const handleMessageSend = async (
   ws: WebSocket,
   payload: unknown,
@@ -250,15 +284,13 @@ export const handleMessageSend = async (
   });
   const guestIds = new Set(roomGuests.map(guest => guest.guestId));
 
-  await broadcastToJoinedMembers({
-    event: {
-      event: 'MESSAGE_SEND',
-      payload: { message },
-    },
-    guestIds,
+  broadcast(room.id, {
+    event: 'MESSAGE_SEND',
+    payload: { message },
   });
 
   await notifyConversationUpdate({
+    roomId: room.id,
     patch: {
       lastMessage: {
         content: message.content,
@@ -349,16 +381,17 @@ export const handleMessageEdit = async (
   });
   const guestIds = new Set(roomGuests.map(guest => guest.guestId));
 
-  await broadcastToJoinedMembers({
-    guestIds,
-    event: {
-      event: 'MESSAGE_EDIT',
-      payload: { message: updated },
-    },
+  broadcast(roomId, {
+    event: 'MESSAGE_EDIT',
+    payload: { message: updated },
   });
 
   const lastMessage = await getRoomLastMessage(roomId);
-  await notifyConversationUpdate({ patch: { lastMessage }, guestIds });
+  await notifyConversationUpdate({
+    roomId,
+    patch: { lastMessage },
+    guestIds,
+  });
 };
 
 export const handleMessageDelete = async (
@@ -428,16 +461,17 @@ export const handleMessageDelete = async (
   });
   const guestIds = new Set(roomGuests.map(guest => guest.guestId));
 
-  await broadcastToJoinedMembers({
-    guestIds,
-    event: {
-      event: 'MESSAGE_DELETE',
-      payload: { roomId, messageId, message: deleted },
-    },
+  broadcast(roomId, {
+    event: 'MESSAGE_DELETE',
+    payload: { roomId, messageId, message: deleted },
   });
 
   const lastMessage = await getRoomLastMessage(roomId);
-  await notifyConversationUpdate({ patch: { lastMessage }, guestIds });
+  await notifyConversationUpdate({
+    roomId,
+    patch: { lastMessage },
+    guestIds,
+  });
 };
 
 export const handleConversationList = async (
@@ -537,6 +571,7 @@ export const eventHandlers: Record<
   (ws: WebSocket, payload: unknown) => Promise<void>
 > = {
   ROOM_JOIN: handleRoomJoin,
+  ROOM_UNFOCUS: handleRoomUnfocus,
   MESSAGE_SEND: handleMessageSend,
   MESSAGE_EDIT: handleMessageEdit,
   MESSAGE_DELETE: handleMessageDelete,

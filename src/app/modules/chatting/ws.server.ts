@@ -9,15 +9,13 @@ import {
 } from './chatting.utils';
 import { chattingValidation } from './chatting.validation';
 import { chattingRequestValidation } from './chatting.validate.request';
-import { clients, roomSubscribers } from './chatting.state';
+import { clients } from './chatting.state';
 import { eventHandlers } from './chatting.handler';
-import { broadcast } from './chatting.broadcast';
+import { unfocusRoom } from './chatting.broadcast';
 import {
   onGuestConnected,
   onGuestDisconnected,
 } from './chatting.presence';
-import { prisma } from '../../utils/prisma';
-import { logActivity } from '../../utils/activityLogger';
 import { upsertGuest } from '../../utils/upsertGuest';
 import { corsOrigins } from '../../../config';
 import { getClientIpFromWs } from '../../utils/getClientIp';
@@ -141,36 +139,7 @@ export const initWebSocketServer = (server: Server): void => {
       const guestId = client?.guestId ?? auth.guestId;
 
       if (client?.roomId) {
-        roomSubscribers.get(client.roomId)?.delete(ws);
-
-        try {
-          await prisma.roomMember.updateMany({
-            where: {
-              roomId: client.roomId,
-              guestId: client.guestId,
-            },
-            data: { leftAt: new Date() },
-          });
-
-          await logActivity({
-            action: 'ROOM_LEAVE',
-            roomId: client.roomId,
-            guestId: client.guestId,
-            ip: client.ip,
-            userAgent: client.userAgent,
-          });
-        } catch (error) {
-          console.error('[WS] leave cleanup failed', error);
-        }
-
-        broadcast(client.roomId, {
-          event: 'ROOM_LEAVE',
-          payload: {
-            roomId: client.roomId,
-            guestId: client.guestId,
-            message: 'A user left the room',
-          },
-        });
+        await unfocusRoom(ws);
       }
       clients.delete(ws);
 
