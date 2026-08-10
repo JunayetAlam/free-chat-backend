@@ -1,12 +1,16 @@
+import { randomUUID } from 'crypto';
 import httpStatus from 'http-status';
+import { Secret } from 'jsonwebtoken';
+import config from '../../../config';
 import catchAsync from '../../utils/catchAsync';
 import sendResponse from '../../utils/sendResponse';
 import { upsertGuest } from '../../utils/upsertGuest';
 import { getClientIpFromRequest } from '../../utils/getClientIp';
 import {
-  resolveGuestId,
-  setGuestCookies,
+  issueGuestTokens,
+  readGuestAuthFromCookies,
 } from '../../utils/setGuestTokenCookies';
+import { verifyToken } from '../../utils/verifyToken';
 import AppError from '../../errors/AppError';
 import { prisma } from '../../utils/prisma';
 import {
@@ -21,8 +25,9 @@ import {
 } from '../../utils/dailyQuota';
 
 const bootstrap = catchAsync(async (req, res) => {
-  // Backend owns guest id: cookie → optional header → new UUID
-  const guestId = resolveGuestId(req);
+  const auth = readGuestAuthFromCookies(req);
+  const guestId = auth?.guestId ?? randomUUID();
+  const isNewSession = !auth;
 
   const ip = getClientIpFromRequest(req);
   const userAgent = req.headers['user-agent'];
@@ -33,14 +38,63 @@ const bootstrap = catchAsync(async (req, res) => {
     userAgent: typeof userAgent === 'string' ? userAgent : undefined,
   });
 
-  const tokens = setGuestCookies(res, { guestId: guest.id });
+  // Always rotate both tokens on bootstrap so opening the site extends the 7d window.
+  const tokens = issueGuestTokens(res, guest.id);
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
-    message: 'Guest bootstrapped successfully',
+    message: isNewSession
+      ? 'Guest session created successfully'
+      : 'Guest bootstrapped successfully',
     data: {
       guest,
       accessToken: tokens.accessToken,
+      isNewSession,
+    },
+  });
+});
+
+const refresh = catchAsync(async (req, res) => {
+  const refreshCookie = req.cookies?.refreshToken as string | undefined;
+  let guestId: string | null = null;
+
+  if (refreshCookie) {
+    try {
+      const decoded = verifyToken(
+        refreshCookie,
+        config.jwt.refresh_secret as Secret,
+      );
+      guestId = decoded.guestId ? String(decoded.guestId) : null;
+    } catch {
+      guestId = null;
+    }
+  }
+
+  if (!guestId) {
+    throw new AppError(
+      httpStatus.UNAUTHORIZED,
+      'Guest session expired. Please continue as a new guest.',
+      { code: 'SESSION_EXPIRED' },
+    );
+  }
+
+  const ip = getClientIpFromRequest(req);
+  const userAgent = req.headers['user-agent'];
+
+  const guest = await upsertGuest({
+    guestId,
+    ip,
+    userAgent: typeof userAgent === 'string' ? userAgent : undefined,
+  });
+
+  const tokens = issueGuestTokens(res, guest.id);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Guest tokens refreshed successfully',
+    data: {
+      accessToken: tokens.accessToken,
+      guest,
     },
   });
 });
@@ -103,7 +157,7 @@ const updateProfile = catchAsync(async (req, res) => {
     });
   }
 
-  setGuestCookies(res, { guestId: guest.id });
+  // Profile update does not mint tokens unless middleware already rotated on refresh.
 
   sendResponse(res, {
     statusCode: httpStatus.OK,
@@ -167,6 +221,7 @@ const updateProfileImage = catchAsync(async (req, res) => {
 
 export const GuestService = {
   bootstrap,
+  refresh,
   me,
   updateProfile,
   updateProfileImage,

@@ -344,56 +344,37 @@ export const extractGuestTokenFromWs = (
   }
 
   const cookies = getCookies(req);
-  const fromCookie = cookies.token || cookies.refreshToken || null;
+  // Access token only — client must refresh HTTP session before WS reconnect.
+  const fromCookie = cookies.token || null;
   if (!fromCookie) return null;
   return { token: fromCookie, fromQuery: false };
 };
 
 /**
- * Auth via query token (preferred for cross-origin) or cookies.
- * guestId comes from JWT. Cookie guestId mismatch is only enforced when
- * auth is cookie-based — bootstrap Set-Cookie may not be visible yet on
- * the immediate post-bootstrap WS handshake, and multi-tab cookie races
- * would otherwise reject a valid query token.
+ * Auth via access JWT (query preferred for cross-origin, else access cookie).
+ * Refresh alone is rejected so the client refreshes HTTP first then reconnects.
+ * Never trusts the plain guestId cookie.
  */
 export const verifyGuestWsAuth = (
   req: IncomingMessage,
 ): { guestId: string; ip?: string; userAgent?: string } | null => {
-  const cookies = getCookies(req);
-  const cookieGuestId = cookies.guestId?.trim() || null;
-
   const extracted = extractGuestTokenFromWs(req);
   if (!extracted) {
     return null;
   }
 
-  const tryDecode = (tok: string, secret: Secret) => {
-    const decoded = verifyToken(tok, secret);
-    return (decoded.guestId as string) || null;
-  };
-
   let tokenGuestId: string | null = null;
   try {
-    tokenGuestId = tryDecode(
+    const decoded = verifyToken(
       extracted.token,
       config.jwt.access_secret as Secret,
     );
+    tokenGuestId = (decoded.guestId as string) || null;
   } catch {
-    try {
-      tokenGuestId = tryDecode(
-        cookies.refreshToken || extracted.token,
-        config.jwt.refresh_secret as Secret,
-      );
-    } catch {
-      return null;
-    }
-  }
-
-  if (!tokenGuestId) {
     return null;
   }
 
-  if (!extracted.fromQuery && cookieGuestId && cookieGuestId !== tokenGuestId) {
+  if (!tokenGuestId) {
     return null;
   }
 

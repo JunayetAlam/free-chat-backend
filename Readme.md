@@ -192,7 +192,7 @@ DATABASE_URL=postgresql://postgres:FC@2026@localhost:8594/fc_production
 
 JWT_ACCESS_SECRET=your_access_secret
 JWT_REFRESH_SECRET=your_refresh_secret
-JWT_ACCESS_EXPIRES_IN=1d
+JWT_ACCESS_EXPIRES_IN=1h
 JWT_REFRESH_EXPIRES_IN=7d
 
 BASE_URL_CLIENT=http://localhost:4467

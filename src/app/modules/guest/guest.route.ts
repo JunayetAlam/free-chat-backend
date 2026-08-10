@@ -9,11 +9,13 @@ import {
   guestMeGetLimiter,
   guestProfileImageLimiter,
   guestProfilePatchLimiter,
+  guestRefreshLimiter,
 } from '../../middlewares/rateLimiters';
 
 const router = express.Router();
 
 router.get('/bootstrap', guestBootstrapLimiter, GuestService.bootstrap);
+router.post('/refresh', guestRefreshLimiter, GuestService.refresh);
 router.get('/me', guestIdentity, guestMeGetLimiter, GuestService.me);
 router.patch(
   '/me',

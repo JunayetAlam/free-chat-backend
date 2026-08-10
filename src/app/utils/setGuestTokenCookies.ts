@@ -1,11 +1,13 @@
-import { randomUUID } from 'crypto';
 import { Request, Response } from 'express';
 import { Secret } from 'jsonwebtoken';
 import config from '../../config';
-import { generateFreeChatToken, GuestTokenPayload } from './generateFreeChatToken';
+import { generateFreeChatToken } from './generateFreeChatToken';
 import { verifyToken } from './verifyToken';
 
 const isProd = config.env === 'production';
+
+const MS_HOUR = 60 * 60 * 1000;
+const MS_DAY = 24 * MS_HOUR;
 
 const cookieOptions = {
   httpOnly: true,
@@ -13,82 +15,101 @@ const cookieOptions = {
   sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax',
 };
 
-const guestIdFromJwtCookies = (req: Request): string | null => {
-  const token = req.cookies?.token as string | undefined;
+export type GuestAuthSource = 'access' | 'refresh';
+
+export type GuestAuthFromCookies = {
+  guestId: string;
+  source: GuestAuthSource;
+};
+
+const accessExpiresIn = () =>
+  (config.jwt.access_expires_in as string | undefined) || '1h';
+
+const refreshExpiresIn = () =>
+  (config.jwt.refresh_expires_in as string | undefined) || '7d';
+
+const tryGuestIdFromToken = (
+  token: string | undefined,
+  secret: Secret,
+): string | null => {
+  if (!token?.trim()) return null;
+  try {
+    const decoded = verifyToken(token, secret);
+    return decoded.guestId ? String(decoded.guestId) : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Read guest identity from JWT cookies only.
+ * Does not trust plain guestId cookie or x-guest-id.
+ */
+export const readGuestAuthFromCookies = (
+  req: Request,
+): GuestAuthFromCookies | null => {
+  const accessToken = req.cookies?.token as string | undefined;
   const refreshToken = req.cookies?.refreshToken as string | undefined;
 
-  if (token) {
-    try {
-      const decoded = verifyToken(token, config.jwt.access_secret as Secret);
-      if (decoded.guestId) return String(decoded.guestId);
-    } catch {
-      // ignore
-    }
+  const fromAccess = tryGuestIdFromToken(
+    accessToken,
+    config.jwt.access_secret as Secret,
+  );
+  if (fromAccess) {
+    return { guestId: fromAccess, source: 'access' };
   }
 
-  if (refreshToken) {
-    try {
-      const decoded = verifyToken(
-        refreshToken,
-        config.jwt.refresh_secret as Secret,
-      );
-      if (decoded.guestId) return String(decoded.guestId);
-    } catch {
-      // ignore
-    }
+  const fromRefresh = tryGuestIdFromToken(
+    refreshToken,
+    config.jwt.refresh_secret as Secret,
+  );
+  if (fromRefresh) {
+    return { guestId: fromRefresh, source: 'refresh' };
   }
 
   return null;
 };
 
-/** Resolve guest id: guestId cookie → JWT cookie → optional header → generate new */
-export const resolveGuestId = (req: Request): string => {
-  const fromCookie =
-    typeof req.cookies?.guestId === 'string' ? req.cookies.guestId.trim() : '';
-  if (fromCookie) return fromCookie;
-
-  const fromJwt = guestIdFromJwtCookies(req);
-  if (fromJwt) return fromJwt;
-
-  const header = req.headers['x-guest-id'];
-  if (typeof header === 'string' && header.trim()) return header.trim();
-
-  return randomUUID();
-};
-
-export const setGuestCookies = (
+/** Issue access + refresh JWTs and set HttpOnly cookies (guestId is non-authoritative). */
+export const issueGuestTokens = (
   res: Response,
-  payload: GuestTokenPayload,
-) => {
+  guestId: string,
+): { accessToken: string; refreshToken: string } => {
   const accessToken = generateFreeChatToken(
-    payload,
+    { guestId },
     config.jwt.access_secret as Secret,
-    (config.jwt.access_expires_in as any) || '1d',
+    accessExpiresIn() as any,
   );
 
   const refreshToken = generateFreeChatToken(
-    payload,
+    { guestId },
     config.jwt.refresh_secret as Secret,
-    (config.jwt.refresh_expires_in as any) || '7d',
+    refreshExpiresIn() as any,
   );
 
-  res.cookie('guestId', payload.guestId, {
+  res.cookie('guestId', guestId, {
     ...cookieOptions,
-    maxAge: 365 * 24 * 60 * 60 * 1000,
+    maxAge: 7 * MS_DAY,
   });
 
   res.cookie('token', accessToken, {
     ...cookieOptions,
-    maxAge: 24 * 60 * 60 * 1000,
+    maxAge: MS_HOUR,
   });
 
   res.cookie('refreshToken', refreshToken, {
     ...cookieOptions,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    maxAge: 7 * MS_DAY,
   });
 
   return { accessToken, refreshToken };
 };
 
-/** @deprecated use setGuestCookies */
+/** @deprecated use issueGuestTokens */
+export const setGuestCookies = (
+  res: Response,
+  payload: { guestId: string },
+) => issueGuestTokens(res, payload.guestId);
+
+/** @deprecated use setGuestCookies / issueGuestTokens */
 export const setGuestTokenCookies = setGuestCookies;

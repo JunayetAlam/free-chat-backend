@@ -69,6 +69,13 @@ export const guestBootstrapLimiter = createLimiter({
   keyGenerator: ipKey,
 });
 
+export const guestRefreshLimiter = createLimiter({
+  windowMs: MIN,
+  max: 30,
+  message: 'Too many token refresh requests. Please wait a moment.',
+  keyGenerator: ipKey,
+});
+
 export const guestMeGetLimiter = createLimiter({
   windowMs: MIN,
   max: 60,
