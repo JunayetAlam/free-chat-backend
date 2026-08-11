@@ -20,12 +20,7 @@ type NoDuplicates<T extends readonly unknown[]> =
   TupleHasDuplicate<T> extends true ? never : T;
 
 const auth = <
-  T extends readonly (
-    | UserRoleEnum
-    | 'ANY'
-    | 'OPTIONAL'
-    | 'CHECK_SUBSCRIPTION'
-  )[],
+  T extends readonly (UserRoleEnum | 'ANY' | 'OPTIONAL')[],
 >(
   ...roles: NoDuplicates<T> extends never ? never : T
 ) => {
@@ -66,14 +61,6 @@ const auth = <
 
       if (user.status === 'BLOCKED') {
         throw new AppError(httpStatus.UNAUTHORIZED, 'You are Blocked!');
-      }
-
-      // Subscription checks are deferred until Payment models are re-enabled.
-      if (
-        roles.includes('CHECK_SUBSCRIPTION') &&
-        !roles.includes('SUPERADMIN')
-      ) {
-        // no-op for now
       }
 
       if (user?.profilePhoto) {

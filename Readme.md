@@ -159,9 +159,9 @@ prisma/
 ### Prerequisites
 
 - **Bun** or **Node.js** 20+
-- **PostgreSQL** 16+ (or Docker Compose below)
+- **Docker** (for local Postgres / Redis) or your own **PostgreSQL** 16+
 
-### Installation
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/JunayetAlam/free-chat-backend.git
@@ -169,7 +169,44 @@ cd free-chat-backend
 bun install
 ```
 
-### Local Database (Docker)
+### 2. Environment files
+
+The app loads `.env` first, then overrides with `.env.development` or `.env.production` (see `src/config/index.ts`).
+
+```bash
+cp .env.example .env
+cp .env.development.example .env.development
+```
+
+For production deploys, also copy `.env.production.example` → `.env.production` and fill real values.
+
+Edit `.env` and set at least Cloudinary (needed for profile/room images):
+
+```env
+CLOUDINARY_CLOUD_NAME=your_cloud_name
+CLOUDINARY_API_KEY=your_api_key
+CLOUDINARY_API_SECRET=your_api_secret
+CLOUDINARY_PROJECT_NAME=flexi-chat
+```
+
+Edit `.env.development` if you need different JWT secrets or DB URL. Defaults match Docker Compose below.
+
+| File | Purpose |
+|------|---------|
+| `.env` | Common vars — `PORT`, Redis, Cloudinary, mail, etc. |
+| `.env.development` | Dev overrides — `DATABASE_URL`, JWT, `BASE_URL_*` |
+| `.env.production` | Prod overrides — same keys as development |
+
+| Variable | Where | Description |
+|----------|-------|-------------|
+| `PORT` | `.env` | HTTP server port (`5467` in examples) |
+| `DATABASE_URL` | mode file | PostgreSQL connection string |
+| `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | mode file | Guest token signing keys |
+| `BASE_URL_CLIENT` | mode file | Frontend origin for CORS |
+| `BASE_URL_SERVER` | mode file | Public API origin |
+| `CLOUDINARY_*` | `.env` | Image upload credentials |
+
+### 3. Local database (Docker)
 
 ```bash
 docker compose --profile local up -d
@@ -181,55 +218,28 @@ docker compose --profile local up -d
 | pgAdmin | `8595` |
 | Redis | `8596` |
 
-### Environment Variables
-
-Create a `.env` file in the project root:
-
-```env
-NODE_ENV=development
-PORT=5467
-DATABASE_URL=postgresql://postgres:FC@2026@localhost:8594/fc_production
-
-JWT_ACCESS_SECRET=your_access_secret
-JWT_REFRESH_SECRET=your_refresh_secret
-JWT_ACCESS_EXPIRES_IN=1h
-JWT_REFRESH_EXPIRES_IN=7d
-
-BASE_URL_CLIENT=http://localhost:4467
-BASE_URL_SERVER=http://localhost:5467
-
-CLOUDINARY_CLOUD_NAME=your_cloud_name
-CLOUDINARY_API_KEY=your_api_key
-CLOUDINARY_API_SECRET=your_api_secret
-CLOUDINARY_PROJECT_NAME=flexi-chat
-```
-
-| Variable | Description |
-|----------|-------------|
-| `PORT` | HTTP server port (default `5467` in dev) |
-| `DATABASE_URL` | PostgreSQL connection string |
-| `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | Guest token signing keys |
-| `BASE_URL_CLIENT` | Frontend origin for CORS |
-| `CLOUDINARY_*` | Image upload credentials |
-
-### Database Setup
+### 4. Database migrate
 
 ```bash
 bun run pm          # prisma migrate dev
 bun run pgen        # prisma generate
 ```
 
-### Development
+### 5. Run development
 
 ```bash
 bun run start:dev
 ```
 
-Server runs at [http://localhost:5467](http://localhost:5467). WebSocket at `ws://localhost:5467/ws`.
+Server: [http://localhost:5467](http://localhost:5467)  
+WebSocket: `ws://localhost:5467/ws`
+
+Pair with the frontend (port `4467`) — see [free-chat-frontend](https://github.com/JunayetAlam/free-chat-frontend).
 
 ### Production Build
 
 ```bash
+cp .env.production.example .env.production   # if not already created
 bun run build
 bun run start:prod
 ```

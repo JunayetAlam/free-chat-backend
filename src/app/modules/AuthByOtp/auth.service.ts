@@ -135,7 +135,6 @@ const verifyEmail = catchAsync(async (req, res) => {
       name: userData.firstName + userData.lastName,
       email: userData.email,
       role: userData.role,
-      // isPaid: false
     },
     config.jwt.access_secret as Secret,
     config.jwt.access_expires_in as SignOptions['expiresIn'],
@@ -277,7 +276,6 @@ const verifyForgotPassOtp = catchAsync(async (req, res) => {
       name: userData.firstName + userData.lastName,
       email: userData.email,
       role: userData.role,
-      // isPaid: false
     },
     config.jwt.access_secret as Secret,
     '600s',

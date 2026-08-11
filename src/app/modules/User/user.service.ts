@@ -54,13 +54,7 @@ const getMyProfile = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.OK,
     message: 'Profile retrieved successfully',
-    data: {
-      ...Profile,
-      isPaid: false,
-      subscriptionPackageId: '',
-      endAt: null,
-      hideSubscription: false,
-    },
+    data: Profile,
   });
 });
 

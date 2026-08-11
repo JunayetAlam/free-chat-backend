@@ -28,47 +28,12 @@ export const generateRefreshToken = async (email: string, user?: User) => {
         throw new AppError(httpStatus.FORBIDDEN, 'Account has been blocked');
     }
 
-    if (userData.role === 'SUPERADMIN') {
-        const accessToken = await generateToken(
-            {
-                id: userData.id,
-                name: userData.firstName + userData.lastName,
-                email: userData.email,
-                role: userData.role,
-                // isPaid: true
-            },
-            config.jwt.access_secret as Secret,
-            config.jwt.access_expires_in as SignOptions['expiresIn'],
-        );
-        return {
-            id: userData.id,
-            role: userData.role,
-            accessToken: accessToken,
-            isPaid: true
-        };
-    }
-    // const payments = await prisma.payment.count({
-    //   where: {
-    //     subscriptionPackage: {
-    //       userType: {
-    //         has: userData.role
-    //       }
-    //     },
-    //     paymentType: 'SUBSCRIPTION',
-    //     paymentStatus: 'SUCCESS',
-    //     endAt: {
-    //       gte: new Date()
-    //     },
-    //     userId: userData.id
-    //   }
-    // });
     const accessToken = await generateToken(
         {
             id: userData.id,
             name: userData.firstName + userData.lastName,
             email: userData.email,
             role: userData.role,
-            // isPaid: payments > 0 ? true : false
         },
         config.jwt.access_secret as Secret,
         config.jwt.access_expires_in as SignOptions['expiresIn'],
@@ -77,7 +42,6 @@ export const generateRefreshToken = async (email: string, user?: User) => {
         id: userData.id,
         role: userData.role,
         accessToken: accessToken,
-        // isPaid: payments > 0 ? true : false
     };
 }
 

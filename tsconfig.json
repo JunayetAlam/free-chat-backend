@@ -2,12 +2,8 @@
   "include": ["src"],
   "exclude": [
     "node_modules",
-    "src/app/modules/Payment",
-    "src/app/modules/Subscription",
     "src/app/modules/Notification",
-    "src/app/modules/Asset",
-    "src/app/utils/StripeUtils.ts",
-    "src/app/utils/stripe.ts"
+    "src/app/modules/Asset"
   ],
   "compilerOptions": {
     /* Visit https://aka.ms/tsconfig to read more about this file */

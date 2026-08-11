@@ -52,11 +52,6 @@ export default {
     secret_key: process.env.DO_SPACE_SECRET_KEY,
     bucket: process.env.DO_SPACE_BUCKET,
   },
-  stripe: {
-    published_key: process.env.STRIPE_PUBLISHED_KEY,
-    stripe_secret_key: process.env.STRIPE_SECRET_KEY,
-    stripe_webhook: process.env.STRIPE_WEBHOOK,
-  },
   cloudinary: {
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
