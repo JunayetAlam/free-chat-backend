@@ -6,6 +6,7 @@ import { ActivityRoutes } from '../modules/activity/activity.route';
 import { JoinedRoomRoutes } from '../modules/joinedRoom/joinedRoom.route';
 import { AuthByOtpRouters } from '../modules/AuthByOtp/auth.routes';
 import { UserRouters } from '../modules/User/user.routes';
+import { FcmRoutes } from '../modules/fcm/fcm.route';
 
 const router = express.Router();
 
@@ -37,6 +38,10 @@ const moduleRoutes = [
   {
     path: '/users',
     route: UserRouters,
+  },
+  {
+    path: '/fcm',
+    route: FcmRoutes,
   },
 ];
 

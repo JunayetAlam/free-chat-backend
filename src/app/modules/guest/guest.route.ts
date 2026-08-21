@@ -6,6 +6,7 @@ import { GuestValidation } from './guest.validation';
 import { uploadMiddleware } from '../Upload/upload.middleware';
 import {
   guestBootstrapLimiter,
+  guestLogoutLimiter,
   guestMeGetLimiter,
   guestProfileImageLimiter,
   guestProfilePatchLimiter,
@@ -16,6 +17,13 @@ const router = express.Router();
 
 router.get('/bootstrap', guestBootstrapLimiter, GuestService.bootstrap);
 router.post('/refresh', guestRefreshLimiter, GuestService.refresh);
+router.post(
+  '/logout',
+  guestIdentity,
+  guestLogoutLimiter,
+  validateRequest.body(GuestValidation.logoutSchema),
+  GuestService.logout,
+);
 router.get('/me', guestIdentity, guestMeGetLimiter, GuestService.me);
 router.patch(
   '/me',

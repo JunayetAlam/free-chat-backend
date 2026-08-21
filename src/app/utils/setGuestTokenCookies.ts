@@ -105,6 +105,12 @@ export const issueGuestTokens = (
   return { accessToken, refreshToken };
 };
 
+export const clearGuestCookies = (res: Response) => {
+  res.clearCookie('guestId', cookieOptions);
+  res.clearCookie('token', cookieOptions);
+  res.clearCookie('refreshToken', cookieOptions);
+};
+
 /** @deprecated use issueGuestTokens */
 export const setGuestCookies = (
   res: Response,

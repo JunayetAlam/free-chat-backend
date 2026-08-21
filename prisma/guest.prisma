@@ -6,6 +6,7 @@ model Guest {
   createdIp    String?
   userAgent    String?
   deviceLabel  String?
+  notificationsEnabled Boolean   @default(true)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   lastSeenAt   DateTime  @default(now())
@@ -21,11 +22,25 @@ model Guest {
   deletedAt  DateTime?
   archivedAt DateTime?
 
-  createdRooms Room[]        @relation("RoomCreator")
+  createdRooms Room[]          @relation("RoomCreator")
   memberships  RoomMember[]
   joinedRooms  JoinedRoom[]
   messages     Message[]
   activityLogs ActivityLog[]
+  fcmTokens    GuestFcmToken[]
 
   @@map("guests")
+}
+
+model GuestFcmToken {
+  id        String   @id @default(uuid())
+  guestId   String
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  guest Guest @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@index([guestId])
+  @@map("guest_fcm_tokens")
 }

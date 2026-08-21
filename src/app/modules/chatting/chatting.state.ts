@@ -7,6 +7,8 @@ export interface ChatClient {
   roomId: string | null;
   /** Bumped on every ROOM_JOIN so overlapping joins discard stale work. */
   joinEpoch: number;
+  /** True while this socket's browser tab is visible on the app. */
+  tabVisible: boolean;
   ip?: string;
   userAgent?: string;
 }

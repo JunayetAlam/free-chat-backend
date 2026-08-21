@@ -76,6 +76,13 @@ export const guestRefreshLimiter = createLimiter({
   keyGenerator: ipKey,
 });
 
+export const guestLogoutLimiter = createLimiter({
+  windowMs: MIN,
+  max: 20,
+  message: 'Too many logout requests. Please wait a moment.',
+  keyGenerator: guestKey,
+});
+
 export const guestMeGetLimiter = createLimiter({
   windowMs: MIN,
   max: 60,

@@ -15,6 +15,13 @@ export const countGuestSockets = (guestId: string): number => {
 export const isGuestOnline = (guestId: string): boolean =>
   countGuestSockets(guestId) > 0;
 
+export const isGuestAppVisible = (guestId: string): boolean => {
+  for (const client of clients.values()) {
+    if (client.guestId === guestId && client.tabVisible) return true;
+  }
+  return false;
+};
+
 export const getOnlineGuestIds = (): string[] => {
   const ids = new Set<string>();
   for (const client of clients.values()) {

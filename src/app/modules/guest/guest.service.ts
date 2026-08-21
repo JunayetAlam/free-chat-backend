@@ -7,6 +7,7 @@ import sendResponse from '../../utils/sendResponse';
 import { upsertGuest } from '../../utils/upsertGuest';
 import { getClientIpFromRequest } from '../../utils/getClientIp';
 import {
+  clearGuestCookies,
   issueGuestTokens,
   readGuestAuthFromCookies,
 } from '../../utils/setGuestTokenCookies';
@@ -23,6 +24,7 @@ import {
   guestQuotaPayload,
   QUOTA_MAX,
 } from '../../utils/dailyQuota';
+import { toPublicGuest } from '../../utils/toPublicGuest';
 
 const bootstrap = catchAsync(async (req, res) => {
   const auth = readGuestAuthFromCookies(req);
@@ -47,7 +49,7 @@ const bootstrap = catchAsync(async (req, res) => {
       ? 'Guest session created successfully'
       : 'Guest bootstrapped successfully',
     data: {
-      guest,
+      guest: toPublicGuest(guest),
       accessToken: tokens.accessToken,
       isNewSession,
     },
@@ -94,7 +96,7 @@ const refresh = catchAsync(async (req, res) => {
     message: 'Guest tokens refreshed successfully',
     data: {
       accessToken: tokens.accessToken,
-      guest,
+      guest: toPublicGuest(guest),
     },
   });
 });
@@ -107,7 +109,7 @@ const me = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.OK,
     message: 'Guest fetched successfully',
-    data: req.guest,
+    data: toPublicGuest(req.guest),
     quota: guestQuotaPayload(req.guest),
   });
 });
@@ -164,7 +166,7 @@ const updateProfile = catchAsync(async (req, res) => {
     message: nameChanged
       ? 'Guest profile updated successfully'
       : 'No profile name change',
-    data: guest,
+    data: toPublicGuest(guest),
     quota: guestQuotaPayload(guest),
   });
 });
@@ -214,14 +216,40 @@ const updateProfileImage = catchAsync(async (req, res) => {
   sendResponse(res, {
     statusCode: httpStatus.OK,
     message: 'Guest profile image updated successfully',
-    data: guest,
+    data: toPublicGuest(guest),
     quota: guestQuotaPayload(guest),
+  });
+});
+
+const logout = catchAsync(async (req, res) => {
+  if (!req.guest) {
+    throw new AppError(
+      httpStatus.UNAUTHORIZED,
+      'Unauthorized: valid guest token required',
+      { code: 'SESSION_EXPIRED' },
+    );
+  }
+
+  const token = String(req.body?.token ?? '').trim();
+  if (token) {
+    await prisma.guestFcmToken.deleteMany({
+      where: { guestId: req.guest.id, token },
+    });
+  }
+
+  clearGuestCookies(res);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    message: 'Logged out successfully',
+    data: { guestId: req.guest.id },
   });
 });
 
 export const GuestService = {
   bootstrap,
   refresh,
+  logout,
   me,
   updateProfile,
   updateProfileImage,

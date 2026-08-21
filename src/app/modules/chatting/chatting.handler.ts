@@ -19,6 +19,7 @@ import { upsertGuest } from '../../utils/upsertGuest';
 import { logActivity } from '../../utils/activityLogger';
 import { activeRecordFilter, softDeleteFields } from '../../utils/softDelete';
 import { recordJoinedRoom } from '../../utils/recordJoinedRoom';
+import { notifyRoomGuestsOfMessage } from './chatting.push';
 
 const MESSAGE_PAGE_SIZE = 30;
 
@@ -220,6 +221,24 @@ export const handleRoomUnfocus = async (
   await unfocusRoom(ws);
 };
 
+export const handleTabVisibility = async (
+  ws: WebSocket,
+  payload: unknown,
+): Promise<void> => {
+  const client = clients.get(ws);
+  if (!client) return;
+
+  const data = await chattingRequestValidation(
+    chattingValidation.wsTabVisibilitySchema,
+    payload,
+    sendError,
+    ws,
+  );
+  if (!data) return;
+
+  client.tabVisible = data.visible;
+};
+
 export const handleMessageSend = async (
   ws: WebSocket,
   payload: unknown,
@@ -299,6 +318,15 @@ export const handleMessageSend = async (
         senderGuestId: message.senderGuestId,
       },
     },
+    guestIds,
+  });
+
+  void notifyRoomGuestsOfMessage({
+    senderGuestId: client.guestId,
+    senderDisplayName: resolveLiveSenderDisplayName(message),
+    content: message.content,
+    roomName: room.name,
+    inviteCode: room.inviteCode,
     guestIds,
   });
 };
@@ -572,6 +600,7 @@ export const eventHandlers: Record<
 > = {
   ROOM_JOIN: handleRoomJoin,
   ROOM_UNFOCUS: handleRoomUnfocus,
+  TAB_VISIBILITY: handleTabVisibility,
   MESSAGE_SEND: handleMessageSend,
   MESSAGE_EDIT: handleMessageEdit,
   MESSAGE_DELETE: handleMessageDelete,

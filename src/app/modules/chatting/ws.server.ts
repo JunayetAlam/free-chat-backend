@@ -64,6 +64,7 @@ export const initWebSocketServer = (server: Server): void => {
       displayName: null,
       roomId: null,
       joinEpoch: 0,
+      tabVisible: true,
       ip: auth.ip,
       userAgent: auth.userAgent,
     });

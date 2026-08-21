@@ -2,6 +2,7 @@ export type WsEventType =
   | 'ROOM_JOIN'
   | 'ROOM_UNFOCUS'
   | 'ROOM_LEAVE'
+  | 'TAB_VISIBILITY'
   | 'MESSAGE_SEND'
   | 'MESSAGE_EDIT'
   | 'MESSAGE_DELETE'
@@ -26,6 +27,11 @@ export interface WsRoomJoinEvent extends WsBaseEvent {
 export interface WsRoomUnfocusEvent extends WsBaseEvent {
   event: 'ROOM_UNFOCUS';
   payload: { roomId: string };
+}
+
+export interface WsTabVisibilityEvent extends WsBaseEvent {
+  event: 'TAB_VISIBILITY';
+  payload: { visible: boolean };
 }
 
 export interface WsMessageSendEvent extends WsBaseEvent {
@@ -75,6 +81,7 @@ export type ConversationListItem = {
 export type WsIncomingEvent =
   | WsRoomJoinEvent
   | WsRoomUnfocusEvent
+  | WsTabVisibilityEvent
   | WsMessageSendEvent
   | WsMessageEditEvent
   | WsMessageDeleteEvent
